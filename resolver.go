@@ -5,6 +5,7 @@ import tea "charm.land/bubbletea/v2"
 // Resolver tracks key sequence state for application-owned actions.
 type Resolver[A comparable] struct {
 	options resolverOptions
+	index   *bindingIndex[A]
 }
 
 // New validates resolver options and builds a resolver.
@@ -14,7 +15,12 @@ func New[A comparable](bindings []Binding[A], opts ...Option) (*Resolver[A], err
 		return nil, err
 	}
 
-	return &Resolver[A]{options: options}, nil
+	index, err := newBindingIndex(bindings)
+	if err != nil {
+		return nil, err
+	}
+
+	return &Resolver[A]{options: options, index: index}, nil
 }
 
 // Update accepts Bubble Tea messages and returns the resolver result plus command.
