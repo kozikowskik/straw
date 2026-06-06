@@ -271,6 +271,22 @@ func TestResolverMatchesSpecialAndModifiedKeys(t *testing.T) {
 	}
 }
 
+// TestModifierMatchingIsExact verifies extra modifiers do not match a narrower binding.
+func TestModifierMatchingIsExact(t *testing.T) {
+	resolver, err := New([]Binding[testAction]{Bind(testGoHome, Sequence(Modified('c', tea.ModCtrl)))})
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+
+	result, _ := resolver.Update(tea.KeyPressMsg(tea.Key{Code: 'c', Mod: tea.ModCtrl | tea.ModAlt}))
+	if result.Match(testGoHome) {
+		t.Fatal("ctrl+alt+c matched ctrl+c binding, want no match")
+	}
+	if !result.IsUnmatched() || !result.PassThrough() {
+		t.Fatalf("result unmatched/pass-through = %v/%v, want true/true", result.IsUnmatched(), result.PassThrough())
+	}
+}
+
 // keyPress builds a printable Bubble Tea key message for resolver tests.
 func keyPress(text string) tea.KeyPressMsg {
 	return tea.KeyPressMsg(tea.Key{Text: text, Code: []rune(text)[0]})
