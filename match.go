@@ -129,6 +129,16 @@ func seqHasPrefix(sequence Seq, prefix Seq) bool {
 	return true
 }
 
+// seqContains reports whether a key sequence contains a specific key.
+func seqContains(sequence Seq, key Key) bool {
+	for _, candidate := range sequence {
+		if candidate == key {
+			return true
+		}
+	}
+	return false
+}
+
 // seqFingerprint builds a stable identity for detecting duplicate binding sequences.
 func seqFingerprint(sequence Seq) string {
 	var builder strings.Builder

@@ -336,3 +336,96 @@ func TestFailedPendingSequenceCanPassThrough(t *testing.T) {
 		t.Fatal("Pending() = true, want false")
 	}
 }
+
+// TestDefaultCancelKeyCancelsPendingSequence verifies escape cancels an in-progress sequence.
+func TestDefaultCancelKeyCancelsPendingSequence(t *testing.T) {
+	resolver, err := New([]Binding[testAction]{Bind(testGoHome, TextSequence("gh"))})
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+
+	resolver.Update(keyPress("g"))
+	result, cmd := resolver.Update(tea.KeyPressMsg(tea.Key{Code: tea.KeyEsc}))
+	if cmd != nil {
+		t.Fatal("Update() cmd is not nil, want nil")
+	}
+	if !result.IsCanceled() || resolver.Pending() {
+		t.Fatalf("result canceled = %v, resolver pending = %v", result.IsCanceled(), resolver.Pending())
+	}
+	assertSeqEqual(t, result.Sequence(), TextSequence("g"))
+}
+
+// TestDefaultCancelKeyTakesPrecedenceWhilePending verifies escape cancels instead of matching a longer binding.
+func TestDefaultCancelKeyTakesPrecedenceWhilePending(t *testing.T) {
+	resolver, err := New([]Binding[testAction]{
+		Bind(testGoHome, TextSequence("gh")),
+		Bind(testCopyLine, Sequence(Text("g"), Code(tea.KeyEsc))),
+	})
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+
+	resolver.Update(keyPress("g"))
+	result, cmd := resolver.Update(tea.KeyPressMsg(tea.Key{Code: tea.KeyEsc}))
+	if cmd != nil {
+		t.Fatal("Update() cmd is not nil, want nil")
+	}
+	if !result.IsCanceled() || result.Match(testCopyLine) {
+		t.Fatalf("result canceled/match copy-line = %v/%v, want true/false", result.IsCanceled(), result.Match(testCopyLine))
+	}
+	if resolver.Pending() {
+		t.Fatal("Pending() = true, want false")
+	}
+	assertSeqEqual(t, result.Sequence(), TextSequence("g"))
+}
+
+// TestConfiguredCancelKeyCancelsPendingSequence verifies custom cancel keys replace the default.
+func TestConfiguredCancelKeyCancelsPendingSequence(t *testing.T) {
+	resolver, err := New(
+		[]Binding[testAction]{Bind(testGoHome, TextSequence("gh"))},
+		WithCancelKeys(Modified('c', tea.ModCtrl)),
+	)
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+
+	resolver.Update(keyPress("g"))
+	result, cmd := resolver.Update(tea.KeyPressMsg(tea.Key{Code: 'c', Mod: tea.ModCtrl}))
+	if cmd != nil {
+		t.Fatal("Update() cmd is not nil, want nil")
+	}
+	if !result.IsCanceled() || resolver.Pending() {
+		t.Fatalf("result canceled = %v, resolver pending = %v", result.IsCanceled(), resolver.Pending())
+	}
+	assertSeqEqual(t, result.Sequence(), TextSequence("g"))
+}
+
+// TestCancelKeyDoesNotCancelWhileIdle verifies cancel keys can still be normal bindings when idle.
+func TestCancelKeyDoesNotCancelWhileIdle(t *testing.T) {
+	resolver, err := New([]Binding[testAction]{Bind(testGoHome, Sequence(Code(tea.KeyEsc)))})
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+
+	result, _ := resolver.Update(tea.KeyPressMsg(tea.Key{Code: tea.KeyEsc}))
+	if !result.Match(testGoHome) {
+		t.Fatalf("Match(testGoHome) = false, want true")
+	}
+}
+
+// TestCancelKeysCanBeDisabled verifies callers can bind cancel-key input when cancellation is off.
+func TestCancelKeysCanBeDisabled(t *testing.T) {
+	resolver, err := New(
+		[]Binding[testAction]{Bind(testGoHome, Sequence(Text("g"), Code(tea.KeyEsc)))},
+		WithCancelKeys(),
+	)
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+
+	resolver.Update(keyPress("g"))
+	result, _ := resolver.Update(tea.KeyPressMsg(tea.Key{Code: tea.KeyEsc}))
+	if !result.Match(testGoHome) {
+		t.Fatalf("Match(testGoHome) = false, want true")
+	}
+}

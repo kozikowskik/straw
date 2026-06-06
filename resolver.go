@@ -32,6 +32,12 @@ func (r *Resolver[A]) Update(msg tea.Msg) (Result[A], tea.Cmd) {
 	}
 
 	key := keyPressMsgToKey(keyMsg)
+	if len(r.pendingSeq) > 0 && seqContains(r.options.cancelKeys, key) {
+		canceled := cloneSeq(r.pendingSeq)
+		r.pendingSeq = nil
+		return canceledResult[A](key, canceled), nil
+	}
+
 	attempted := append(cloneSeq(r.pendingSeq), key)
 	status := r.index.lookup(attempted)
 
