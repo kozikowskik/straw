@@ -311,6 +311,34 @@ func ExampleIdle() {
 	// 0
 }
 
+func ExamplePending() {
+	fmt.Println(straw.Pending)
+
+	// Output:
+	// 1
+}
+
+func ExampleMatched() {
+	fmt.Println(straw.Matched)
+
+	// Output:
+	// 2
+}
+
+func ExampleUnmatched() {
+	fmt.Println(straw.Unmatched)
+
+	// Output:
+	// 3
+}
+
+func ExampleCanceled() {
+	fmt.Println(straw.Canceled)
+
+	// Output:
+	// 4
+}
+
 func ExampleResult() {
 	resolver, _ := straw.New[string](nil)
 	result, _ := resolver.Update(struct{}{})
@@ -319,4 +347,115 @@ func ExampleResult() {
 
 	// Output:
 	// straw.Result[string]
+}
+
+func ExampleResult_Match() {
+	resolver, _ := straw.New[string](nil)
+	result, _ := resolver.Update(struct{}{})
+
+	fmt.Println(result.Match("go-home"))
+
+	// Output:
+	// false
+}
+
+func ExampleResult_Binding() {
+	resolver, _ := straw.New[string](nil)
+	result, _ := resolver.Update(struct{}{})
+	_, ok := result.Binding()
+
+	fmt.Println(ok)
+
+	// Output:
+	// false
+}
+
+func ExampleResult_State() {
+	resolver, _ := straw.New[string](nil)
+	result, _ := resolver.Update(struct{}{})
+
+	fmt.Println(result.State())
+
+	// Output:
+	// 0
+}
+
+func ExampleResult_IsIdle() {
+	resolver, _ := straw.New[string](nil)
+	result, _ := resolver.Update(struct{}{})
+
+	fmt.Println(result.IsIdle())
+
+	// Output:
+	// true
+}
+
+func ExampleResult_IsPending() {
+	resolver, _ := straw.New[string](nil)
+	result, _ := resolver.Update(struct{}{})
+
+	fmt.Println(result.IsPending())
+
+	// Output:
+	// false
+}
+
+func ExampleResult_IsMatched() {
+	resolver, _ := straw.New[string](nil)
+	result, _ := resolver.Update(struct{}{})
+
+	fmt.Println(result.IsMatched())
+
+	// Output:
+	// false
+}
+
+func ExampleResult_IsUnmatched() {
+	resolver, _ := straw.New[string](nil)
+	result, _ := resolver.Update(struct{}{})
+
+	fmt.Println(result.IsUnmatched())
+
+	// Output:
+	// false
+}
+
+func ExampleResult_IsCanceled() {
+	resolver, _ := straw.New[string](nil)
+	result, _ := resolver.Update(struct{}{})
+
+	fmt.Println(result.IsCanceled())
+
+	// Output:
+	// false
+}
+
+func ExampleResult_PassThrough() {
+	resolver, _ := straw.New[string](nil)
+	result, _ := resolver.Update(struct{}{})
+
+	fmt.Println(result.PassThrough())
+
+	// Output:
+	// false
+}
+
+func ExampleResult_Key() {
+	resolver, _ := straw.New[string](nil)
+	result, _ := resolver.Update(struct{}{})
+
+	fmt.Printf("%T\n", result.Key())
+
+	// Output:
+	// straw.Key
+}
+
+func ExampleResult_Sequence() {
+	resolver, _ := straw.New[string](nil)
+	result, _ := resolver.Update(struct{}{})
+
+	fmt.Println(len(result.Sequence()))
+
+	// Output:
+	// 0
 }

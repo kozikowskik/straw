@@ -1,0 +1,92 @@
+package straw
+
+import (
+	"testing"
+
+	tea "charm.land/bubbletea/v2"
+)
+
+func TestIdleResultContract(t *testing.T) {
+	result := idleResult[testAction]()
+
+	if result.State() != Idle || !result.IsIdle() {
+		t.Fatalf("idle result state = %v, IsIdle = %v", result.State(), result.IsIdle())
+	}
+	if result.Match(testGoHome) {
+		t.Fatal("Match() = true, want false")
+	}
+	if _, ok := result.Binding(); ok {
+		t.Fatal("Binding() ok = true, want false")
+	}
+	if result.PassThrough() {
+		t.Fatal("PassThrough() = true, want false")
+	}
+	assertSeqEqual(t, result.Sequence(), nil)
+}
+
+func TestPendingResultContract(t *testing.T) {
+	result := pendingResult[testAction](Text("g"), TextSequence("g"))
+
+	if !result.IsPending() || result.State() != Pending {
+		t.Fatalf("pending state = %v, IsPending = %v", result.State(), result.IsPending())
+	}
+	if result.Key() != Text("g") {
+		t.Fatalf("Key() = %#v, want text g", result.Key())
+	}
+	if result.Match(testGoHome) {
+		t.Fatal("Match() = true, want false")
+	}
+	if _, ok := result.Binding(); ok {
+		t.Fatal("Binding() ok = true, want false")
+	}
+	assertSeqEqual(t, result.Sequence(), TextSequence("g"))
+}
+
+func TestMatchedResultContract(t *testing.T) {
+	binding := Bind(testGoHome, TextSequence("gh"), Description("go home"))
+	result := matchedResult(binding, Text("h"))
+
+	if !result.IsMatched() || result.State() != Matched {
+		t.Fatalf("matched state = %v, IsMatched = %v", result.State(), result.IsMatched())
+	}
+	if !result.Match(testGoHome) {
+		t.Fatal("Match(testGoHome) = false, want true")
+	}
+	if result.Match(testCopyLine) {
+		t.Fatal("Match(testCopyLine) = true, want false")
+	}
+	gotBinding, ok := result.Binding()
+	if !ok {
+		t.Fatal("Binding() ok = false, want true")
+	}
+	if gotBinding.Description() != "go home" {
+		t.Fatalf("Binding().Description() = %q, want go home", gotBinding.Description())
+	}
+	if result.Key() != Text("h") {
+		t.Fatalf("Key() = %#v, want text h", result.Key())
+	}
+	assertSeqEqual(t, result.Sequence(), TextSequence("gh"))
+}
+
+func TestUnmatchedAndCanceledResultContracts(t *testing.T) {
+	unmatched := unmatchedResult[testAction](Text("x"), TextSequence("gx"), true)
+	if !unmatched.IsUnmatched() || !unmatched.PassThrough() {
+		t.Fatalf("unmatched state/pass-through = %v/%v, want unmatched/true", unmatched.State(), unmatched.PassThrough())
+	}
+	assertSeqEqual(t, unmatched.Sequence(), TextSequence("gx"))
+
+	canceled := canceledResult[testAction](Code(tea.KeyEsc), TextSequence("g"))
+	if !canceled.IsCanceled() || canceled.PassThrough() {
+		t.Fatalf("canceled state/pass-through = %v/%v, want canceled/false", canceled.State(), canceled.PassThrough())
+	}
+	assertSeqEqual(t, canceled.Sequence(), TextSequence("g"))
+}
+
+func TestResultSequenceReturnsCopy(t *testing.T) {
+	result := pendingResult[testAction](Text("g"), TextSequence("g"))
+
+	sequence := result.Sequence()
+	sequence[0] = Text("x")
+
+	assertSeqEqual(t, result.Sequence(), TextSequence("g"))
+}
