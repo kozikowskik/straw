@@ -14,6 +14,12 @@ type bindingIndex[A comparable] struct {
 	bindings []Binding[A]
 }
 
+type matchStatus[A comparable] struct {
+	binding   Binding[A]
+	hasMatch  bool
+	hasPrefix bool
+}
+
 // newBindingIndex validates bindings and stores safe copies for resolver use.
 func newBindingIndex[A comparable](bindings []Binding[A]) (*bindingIndex[A], error) {
 	var errs []error
@@ -48,6 +54,22 @@ func newBindingIndex[A comparable](bindings []Binding[A]) (*bindingIndex[A], err
 	return &bindingIndex[A]{bindings: cloned}, nil
 }
 
+// lookup checks whether a sequence is an exact match, a prefix, or both.
+func (i *bindingIndex[A]) lookup(sequence Seq) matchStatus[A] {
+	status := matchStatus[A]{}
+	for _, binding := range i.bindings {
+		bindingSequence := binding.Sequence()
+		if seqEqual(bindingSequence, sequence) {
+			status.binding = binding
+			status.hasMatch = true
+		}
+		if len(bindingSequence) > len(sequence) && seqHasPrefix(bindingSequence, sequence) {
+			status.hasPrefix = true
+		}
+	}
+	return status
+}
+
 // validateKey enforces the public key-builder contract at resolver construction time.
 func validateKey(key Key) error {
 	switch key.kind {
@@ -79,6 +101,32 @@ func validateKey(key Key) error {
 // isPrintableRegularKeyCode catches text-like keys that should use Text instead of Code.
 func isPrintableRegularKeyCode(code rune) bool {
 	return code != tea.KeySpace && unicode.IsPrint(code)
+}
+
+// seqEqual reports whether two key sequences contain the same keys in order.
+func seqEqual(left Seq, right Seq) bool {
+	if len(left) != len(right) {
+		return false
+	}
+	for index := range left {
+		if left[index] != right[index] {
+			return false
+		}
+	}
+	return true
+}
+
+// seqHasPrefix reports whether a sequence starts with the given prefix.
+func seqHasPrefix(sequence Seq, prefix Seq) bool {
+	if len(prefix) > len(sequence) {
+		return false
+	}
+	for index := range prefix {
+		if sequence[index] != prefix[index] {
+			return false
+		}
+	}
+	return true
 }
 
 // seqFingerprint builds a stable identity for detecting duplicate binding sequences.

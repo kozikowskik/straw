@@ -13,6 +13,7 @@ const (
 	testCopyLine
 )
 
+// TestBindStoresActionSequenceAndDescription verifies Bind preserves required binding data.
 func TestBindStoresActionSequenceAndDescription(t *testing.T) {
 	sequence := TextSequence("gh")
 	binding := Bind(testGoHome, sequence, Description("go home"))
@@ -28,6 +29,7 @@ func TestBindStoresActionSequenceAndDescription(t *testing.T) {
 	}
 }
 
+// TestBindAllowsNoDescription verifies description metadata is optional.
 func TestBindAllowsNoDescription(t *testing.T) {
 	binding := Bind(testCopyLine, TextSequence("yy"))
 
@@ -40,6 +42,7 @@ func TestBindAllowsNoDescription(t *testing.T) {
 	}
 }
 
+// TestBindingSequenceReturnsCopy verifies callers cannot mutate binding-owned sequences.
 func TestBindingSequenceReturnsCopy(t *testing.T) {
 	original := TextSequence("gh")
 	binding := Bind(testGoHome, original)
@@ -52,10 +55,12 @@ func TestBindingSequenceReturnsCopy(t *testing.T) {
 	assertSeqEqual(t, binding.Sequence(), TextSequence("gh"))
 }
 
+// TestTextSequenceSplitsByRune verifies Unicode text is split into single-rune keys.
 func TestTextSequenceSplitsByRune(t *testing.T) {
 	assertSeqEqual(t, TextSequence("gé"), Sequence(Text("g"), Text("é")))
 }
 
+// TestSequenceReturnsCopy verifies Sequence does not retain caller-owned slices.
 func TestSequenceReturnsCopy(t *testing.T) {
 	keys := []Key{Text("g"), Text("h")}
 	sequence := Sequence(keys...)
@@ -64,12 +69,14 @@ func TestSequenceReturnsCopy(t *testing.T) {
 	assertSeqEqual(t, sequence, TextSequence("gh"))
 }
 
+// TestSequenceSupportsExplicitKeyConstructors verifies explicit Text keys match text sequences.
 func TestSequenceSupportsExplicitKeyConstructors(t *testing.T) {
 	sequence := Sequence(Text("g"), Text("h"))
 
 	assertSeqEqual(t, sequence, TextSequence("gh"))
 }
 
+// TestCodeAndModifiedKeysCanBeStoredInSequence verifies non-text key builders compose in sequences.
 func TestCodeAndModifiedKeysCanBeStoredInSequence(t *testing.T) {
 	sequence := Sequence(Code(tea.KeyEsc), Modified('c', tea.ModCtrl))
 
@@ -86,6 +93,7 @@ func TestCodeAndModifiedKeysCanBeStoredInSequence(t *testing.T) {
 	}
 }
 
+// assertSeqEqual compares sequences while producing focused test failures.
 func assertSeqEqual(t *testing.T, got Seq, want Seq) {
 	t.Helper()
 

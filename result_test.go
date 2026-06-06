@@ -6,6 +6,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 )
 
+// TestIdleResultContract verifies idle results expose no match or pass-through behavior.
 func TestIdleResultContract(t *testing.T) {
 	result := idleResult[testAction]()
 
@@ -24,6 +25,7 @@ func TestIdleResultContract(t *testing.T) {
 	assertSeqEqual(t, result.Sequence(), nil)
 }
 
+// TestPendingResultContract verifies pending results expose partial sequence state.
 func TestPendingResultContract(t *testing.T) {
 	result := pendingResult[testAction](Text("g"), TextSequence("g"))
 
@@ -42,6 +44,7 @@ func TestPendingResultContract(t *testing.T) {
 	assertSeqEqual(t, result.Sequence(), TextSequence("g"))
 }
 
+// TestMatchedResultContract verifies matched results expose the matching binding and key.
 func TestMatchedResultContract(t *testing.T) {
 	binding := Bind(testGoHome, TextSequence("gh"), Description("go home"))
 	result := matchedResult(binding, Text("h"))
@@ -68,6 +71,7 @@ func TestMatchedResultContract(t *testing.T) {
 	assertSeqEqual(t, result.Sequence(), TextSequence("gh"))
 }
 
+// TestUnmatchedAndCanceledResultContracts verifies failed and canceled result state contracts.
 func TestUnmatchedAndCanceledResultContracts(t *testing.T) {
 	unmatched := unmatchedResult[testAction](Text("x"), TextSequence("gx"), true)
 	if !unmatched.IsUnmatched() || !unmatched.PassThrough() {
@@ -82,6 +86,7 @@ func TestUnmatchedAndCanceledResultContracts(t *testing.T) {
 	assertSeqEqual(t, canceled.Sequence(), TextSequence("g"))
 }
 
+// TestResultSequenceReturnsCopy verifies callers cannot mutate result-owned sequences.
 func TestResultSequenceReturnsCopy(t *testing.T) {
 	result := pendingResult[testAction](Text("g"), TextSequence("g"))
 

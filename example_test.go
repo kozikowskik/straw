@@ -9,6 +9,7 @@ import (
 	"github.com/kozikowskik/straw"
 )
 
+// ExampleKey demonstrates using Key as the public key value type.
 func ExampleKey() {
 	var key straw.Key = straw.Text("g")
 	sequence := straw.Sequence(key)
@@ -19,6 +20,7 @@ func ExampleKey() {
 	// 1
 }
 
+// ExampleSeq demonstrates using Seq as the public sequence value type.
 func ExampleSeq() {
 	var sequence straw.Seq = straw.TextSequence("gh")
 
@@ -28,6 +30,7 @@ func ExampleSeq() {
 	// 2
 }
 
+// ExampleText demonstrates building a printable text key.
 func ExampleText() {
 	sequence := straw.Sequence(straw.Text("g"))
 
@@ -37,6 +40,7 @@ func ExampleText() {
 	// 1
 }
 
+// ExampleTextSequence demonstrates building a text-only key sequence.
 func ExampleTextSequence() {
 	sequence := straw.TextSequence("gé")
 
@@ -46,6 +50,7 @@ func ExampleTextSequence() {
 	// 2
 }
 
+// ExampleCode demonstrates building a special Bubble Tea key.
 func ExampleCode() {
 	sequence := straw.Sequence(straw.Code(tea.KeyEsc))
 
@@ -55,6 +60,7 @@ func ExampleCode() {
 	// 1
 }
 
+// ExampleModified demonstrates building a modified key.
 func ExampleModified() {
 	sequence := straw.Sequence(straw.Modified('c', tea.ModCtrl))
 
@@ -64,6 +70,7 @@ func ExampleModified() {
 	// 1
 }
 
+// ExampleSequence demonstrates composing mixed key types into one sequence.
 func ExampleSequence() {
 	sequence := straw.Sequence(
 		straw.Text("g"),
@@ -77,6 +84,7 @@ func ExampleSequence() {
 	// 3
 }
 
+// ExampleBinding demonstrates using Binding as the public binding value type.
 func ExampleBinding() {
 	type action int
 
@@ -90,6 +98,7 @@ func ExampleBinding() {
 	// 1
 }
 
+// ExampleBindingOption demonstrates passing optional binding metadata.
 func ExampleBindingOption() {
 	var option straw.BindingOption = straw.Description("go home")
 	binding := straw.Bind("go-home", straw.TextSequence("gh"), option)
@@ -100,6 +109,7 @@ func ExampleBindingOption() {
 	// go home
 }
 
+// ExampleDescription demonstrates attaching human-readable binding metadata.
 func ExampleDescription() {
 	binding := straw.Bind("go-home",
 		straw.TextSequence("gh"),
@@ -112,6 +122,7 @@ func ExampleDescription() {
 	// go home
 }
 
+// ExampleBind demonstrates connecting an action to a key sequence.
 func ExampleBind() {
 	type action int
 
@@ -132,6 +143,7 @@ func ExampleBind() {
 	// 2
 }
 
+// ExampleBinding_Action demonstrates reading the action stored in a binding.
 func ExampleBinding_Action() {
 	binding := straw.Bind("go-home", straw.TextSequence("gh"))
 
@@ -141,6 +153,7 @@ func ExampleBinding_Action() {
 	// go-home
 }
 
+// ExampleBinding_Sequence demonstrates reading the sequence stored in a binding.
 func ExampleBinding_Sequence() {
 	binding := straw.Bind("go-home", straw.TextSequence("gh"))
 
@@ -150,6 +163,7 @@ func ExampleBinding_Sequence() {
 	// 2
 }
 
+// ExampleBinding_Description demonstrates reading binding metadata.
 func ExampleBinding_Description() {
 	binding := straw.Bind("go-home",
 		straw.TextSequence("gh"),
@@ -162,6 +176,7 @@ func ExampleBinding_Description() {
 	// go home
 }
 
+// ExampleErrInvalidBinding demonstrates checking for invalid binding errors.
 func ExampleErrInvalidBinding() {
 	fmt.Println(errors.Is(straw.ErrInvalidBinding, straw.ErrInvalidBinding))
 
@@ -169,6 +184,7 @@ func ExampleErrInvalidBinding() {
 	// true
 }
 
+// ExampleErrInvalidKey demonstrates checking for invalid key errors.
 func ExampleErrInvalidKey() {
 	fmt.Println(errors.Is(straw.ErrInvalidKey, straw.ErrInvalidKey))
 
@@ -176,6 +192,7 @@ func ExampleErrInvalidKey() {
 	// true
 }
 
+// ExampleErrDuplicateSequence demonstrates checking for duplicate sequence errors.
 func ExampleErrDuplicateSequence() {
 	fmt.Println(errors.Is(straw.ErrDuplicateSequence, straw.ErrDuplicateSequence))
 
@@ -183,6 +200,7 @@ func ExampleErrDuplicateSequence() {
 	// true
 }
 
+// ExampleErrInvalidOption demonstrates checking for invalid resolver options.
 func ExampleErrInvalidOption() {
 	_, err := straw.New[string](nil, straw.WithTimeout(0))
 
@@ -192,6 +210,7 @@ func ExampleErrInvalidOption() {
 	// true
 }
 
+// ExampleOption demonstrates passing an option value to New.
 func ExampleOption() {
 	var option straw.Option = straw.WithTimeout(250 * time.Millisecond)
 	resolver, err := straw.New[string](nil, option)
@@ -204,6 +223,7 @@ func ExampleOption() {
 	// false
 }
 
+// ExampleWithTimeout demonstrates configuring pending-sequence timeout duration.
 func ExampleWithTimeout() {
 	resolver, err := straw.New[string](nil, straw.WithTimeout(250*time.Millisecond))
 
@@ -215,6 +235,7 @@ func ExampleWithTimeout() {
 	// false
 }
 
+// ExampleWithCancelKeys demonstrates configuring keys that cancel pending sequences.
 func ExampleWithCancelKeys() {
 	resolver, err := straw.New[string](nil,
 		straw.WithCancelKeys(straw.Code(tea.KeyEsc), straw.Modified('c', tea.ModCtrl)),
@@ -228,6 +249,7 @@ func ExampleWithCancelKeys() {
 	// false
 }
 
+// ExampleWithFailedPendingPassThrough demonstrates configuring failed-pending pass-through behavior.
 func ExampleWithFailedPendingPassThrough() {
 	resolver, err := straw.New[string](nil, straw.WithFailedPendingPassThrough(true))
 
@@ -239,6 +261,7 @@ func ExampleWithFailedPendingPassThrough() {
 	// false
 }
 
+// ExampleResolver demonstrates constructing a resolver.
 func ExampleResolver() {
 	resolver, err := straw.New[string](nil)
 
@@ -250,6 +273,7 @@ func ExampleResolver() {
 	// false
 }
 
+// ExampleNew demonstrates creating a resolver from bindings.
 func ExampleNew() {
 	bindings := []straw.Binding[string]{
 		straw.Bind("go-home", straw.TextSequence("gh")),
@@ -264,18 +288,28 @@ func ExampleNew() {
 	// false
 }
 
+// ExampleResolver_Update demonstrates updating a resolver with key press messages.
 func ExampleResolver_Update() {
-	resolver, _ := straw.New[string](nil)
-	result, cmd := resolver.Update(struct{}{})
+	resolver, _ := straw.New([]straw.Binding[string]{
+		straw.Bind("go-home", straw.TextSequence("gh")),
+	})
 
-	fmt.Printf("%T\n", result)
+	result, cmd := resolver.Update(tea.KeyPressMsg(tea.Key{Text: "g", Code: 'g'}))
+	fmt.Println(result.IsPending())
+	fmt.Println(cmd != nil)
+
+	result, cmd = resolver.Update(tea.KeyPressMsg(tea.Key{Text: "h", Code: 'h'}))
+	fmt.Println(result.Match("go-home"))
 	fmt.Println(cmd == nil)
 
 	// Output:
-	// straw.Result[string]
+	// true
+	// true
+	// true
 	// true
 }
 
+// ExampleResolver_Reset demonstrates clearing resolver pending state.
 func ExampleResolver_Reset() {
 	resolver, _ := straw.New[string](nil)
 	resolver.Reset()
@@ -286,6 +320,7 @@ func ExampleResolver_Reset() {
 	// false
 }
 
+// ExampleResolver_Pending demonstrates checking whether a resolver is pending.
 func ExampleResolver_Pending() {
 	resolver, _ := straw.New[string](nil)
 
@@ -295,6 +330,7 @@ func ExampleResolver_Pending() {
 	// false
 }
 
+// ExampleState demonstrates using State as the public result-state type.
 func ExampleState() {
 	var state straw.State = straw.Idle
 
@@ -304,6 +340,7 @@ func ExampleState() {
 	// 0
 }
 
+// ExampleIdle demonstrates the idle result state.
 func ExampleIdle() {
 	fmt.Println(straw.Idle)
 
@@ -311,6 +348,7 @@ func ExampleIdle() {
 	// 0
 }
 
+// ExamplePending demonstrates the pending result state.
 func ExamplePending() {
 	fmt.Println(straw.Pending)
 
@@ -318,6 +356,7 @@ func ExamplePending() {
 	// 1
 }
 
+// ExampleMatched demonstrates the matched result state.
 func ExampleMatched() {
 	fmt.Println(straw.Matched)
 
@@ -325,6 +364,7 @@ func ExampleMatched() {
 	// 2
 }
 
+// ExampleUnmatched demonstrates the unmatched result state.
 func ExampleUnmatched() {
 	fmt.Println(straw.Unmatched)
 
@@ -332,6 +372,7 @@ func ExampleUnmatched() {
 	// 3
 }
 
+// ExampleCanceled demonstrates the canceled result state.
 func ExampleCanceled() {
 	fmt.Println(straw.Canceled)
 
@@ -339,6 +380,7 @@ func ExampleCanceled() {
 	// 4
 }
 
+// ExampleResult demonstrates using Result as the public update outcome type.
 func ExampleResult() {
 	resolver, _ := straw.New[string](nil)
 	result, _ := resolver.Update(struct{}{})
@@ -349,6 +391,7 @@ func ExampleResult() {
 	// straw.Result[string]
 }
 
+// ExampleResult_Match demonstrates checking whether a result matched an action.
 func ExampleResult_Match() {
 	resolver, _ := straw.New[string](nil)
 	result, _ := resolver.Update(struct{}{})
@@ -359,6 +402,7 @@ func ExampleResult_Match() {
 	// false
 }
 
+// ExampleResult_Binding demonstrates retrieving a matched binding when present.
 func ExampleResult_Binding() {
 	resolver, _ := straw.New[string](nil)
 	result, _ := resolver.Update(struct{}{})
@@ -370,6 +414,7 @@ func ExampleResult_Binding() {
 	// false
 }
 
+// ExampleResult_State demonstrates reading the result state.
 func ExampleResult_State() {
 	resolver, _ := straw.New[string](nil)
 	result, _ := resolver.Update(struct{}{})
@@ -380,6 +425,7 @@ func ExampleResult_State() {
 	// 0
 }
 
+// ExampleResult_IsIdle demonstrates checking for idle results.
 func ExampleResult_IsIdle() {
 	resolver, _ := straw.New[string](nil)
 	result, _ := resolver.Update(struct{}{})
@@ -390,6 +436,7 @@ func ExampleResult_IsIdle() {
 	// true
 }
 
+// ExampleResult_IsPending demonstrates checking for pending results.
 func ExampleResult_IsPending() {
 	resolver, _ := straw.New[string](nil)
 	result, _ := resolver.Update(struct{}{})
@@ -400,6 +447,7 @@ func ExampleResult_IsPending() {
 	// false
 }
 
+// ExampleResult_IsMatched demonstrates checking for matched results.
 func ExampleResult_IsMatched() {
 	resolver, _ := straw.New[string](nil)
 	result, _ := resolver.Update(struct{}{})
@@ -410,6 +458,7 @@ func ExampleResult_IsMatched() {
 	// false
 }
 
+// ExampleResult_IsUnmatched demonstrates checking for unmatched results.
 func ExampleResult_IsUnmatched() {
 	resolver, _ := straw.New[string](nil)
 	result, _ := resolver.Update(struct{}{})
@@ -420,6 +469,7 @@ func ExampleResult_IsUnmatched() {
 	// false
 }
 
+// ExampleResult_IsCanceled demonstrates checking for canceled results.
 func ExampleResult_IsCanceled() {
 	resolver, _ := straw.New[string](nil)
 	result, _ := resolver.Update(struct{}{})
@@ -430,6 +480,7 @@ func ExampleResult_IsCanceled() {
 	// false
 }
 
+// ExampleResult_PassThrough demonstrates checking host pass-through behavior.
 func ExampleResult_PassThrough() {
 	resolver, _ := straw.New[string](nil)
 	result, _ := resolver.Update(struct{}{})
@@ -440,6 +491,7 @@ func ExampleResult_PassThrough() {
 	// false
 }
 
+// ExampleResult_Key demonstrates retrieving the key associated with a result.
 func ExampleResult_Key() {
 	resolver, _ := straw.New[string](nil)
 	result, _ := resolver.Update(struct{}{})
@@ -450,6 +502,7 @@ func ExampleResult_Key() {
 	// straw.Key
 }
 
+// ExampleResult_Sequence demonstrates retrieving the sequence associated with a result.
 func ExampleResult_Sequence() {
 	resolver, _ := straw.New[string](nil)
 	result, _ := resolver.Update(struct{}{})

@@ -100,6 +100,7 @@ func (b Binding[A]) Description() string {
 	return b.description
 }
 
+// cloneSeq returns an independent copy of a key sequence.
 func cloneSeq(sequence []Key) Seq {
 	cloned := make(Seq, len(sequence))
 	copy(cloned, sequence)

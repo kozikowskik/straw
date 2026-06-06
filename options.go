@@ -39,6 +39,7 @@ func WithFailedPendingPassThrough(enabled bool) Option {
 	}
 }
 
+// defaultResolverOptions builds the baseline configuration used when callers omit options.
 func defaultResolverOptions() resolverOptions {
 	return resolverOptions{
 		timeout:    defaultTimeout,
@@ -46,6 +47,7 @@ func defaultResolverOptions() resolverOptions {
 	}
 }
 
+// buildResolverOptions applies caller options and validates the resolved configuration.
 func buildResolverOptions(options []Option) (resolverOptions, error) {
 	resolved := defaultResolverOptions()
 	for _, option := range options {
