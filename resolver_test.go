@@ -429,3 +429,132 @@ func TestCancelKeysCanBeDisabled(t *testing.T) {
 		t.Fatalf("Match(testGoHome) = false, want true")
 	}
 }
+
+// TestAmbiguousMatchWaitsForContinuation verifies exact-prefix ambiguity waits for another key.
+func TestAmbiguousMatchWaitsForContinuation(t *testing.T) {
+	resolver, err := New([]Binding[testAction]{
+		Bind(testGoHome, TextSequence("g")),
+		Bind(testCopyLine, TextSequence("gh")),
+	})
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+
+	result, cmd := resolver.Update(keyPress("g"))
+	if cmd == nil {
+		t.Fatal("Update() cmd = nil, want timeout command")
+	}
+	if !result.IsPending() || result.Match(testGoHome) {
+		t.Fatalf("after g: pending = %v, match short = %v, want pending true and match false", result.IsPending(), result.Match(testGoHome))
+	}
+
+	result, cmd = resolver.Update(keyPress("h"))
+	if cmd != nil {
+		t.Fatal("Update() cmd is not nil, want nil")
+	}
+	if !result.Match(testCopyLine) {
+		t.Fatalf("Match(testCopyLine) = false, want true")
+	}
+}
+
+// TestAmbiguousMatchResolvesShortBindingOnTimeout verifies timeout accepts a pending exact match.
+func TestAmbiguousMatchResolvesShortBindingOnTimeout(t *testing.T) {
+	resolver, err := New([]Binding[testAction]{
+		Bind(testGoHome, TextSequence("g")),
+		Bind(testCopyLine, TextSequence("gh")),
+	})
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+
+	resolver.Update(keyPress("g"))
+	result, cmd := resolver.Update(resolverTimeoutMsg{resolverID: resolver.id, generation: resolver.generation})
+	if cmd != nil {
+		t.Fatal("timeout Update() cmd is not nil, want nil")
+	}
+	if !result.Match(testGoHome) || resolver.Pending() {
+		t.Fatalf("timeout match short = %v, pending = %v, want true/false", result.Match(testGoHome), resolver.Pending())
+	}
+}
+
+// TestReturnedTimeoutCommandResolvesPendingMatch verifies timeout commands emit usable messages.
+func TestReturnedTimeoutCommandResolvesPendingMatch(t *testing.T) {
+	resolver, err := New(
+		[]Binding[testAction]{
+			Bind(testGoHome, TextSequence("g")),
+			Bind(testCopyLine, TextSequence("gh")),
+		},
+		WithTimeout(time.Nanosecond),
+	)
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+
+	_, cmd := resolver.Update(keyPress("g"))
+	if cmd == nil {
+		t.Fatal("Update() cmd = nil, want timeout command")
+	}
+
+	result, next := resolver.Update(cmd())
+	if next != nil {
+		t.Fatal("timeout Update() cmd is not nil, want nil")
+	}
+	if !result.Match(testGoHome) || resolver.Pending() {
+		t.Fatalf("timeout command match short = %v, pending = %v, want true/false", result.Match(testGoHome), resolver.Pending())
+	}
+}
+
+// TestPurePrefixCancelsOnTimeout verifies timeout cancels a prefix with no pending exact match.
+func TestPurePrefixCancelsOnTimeout(t *testing.T) {
+	resolver, err := New([]Binding[testAction]{Bind(testGoHome, TextSequence("gh"))})
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+
+	resolver.Update(keyPress("g"))
+	result, _ := resolver.Update(resolverTimeoutMsg{resolverID: resolver.id, generation: resolver.generation})
+	if !result.IsCanceled() || resolver.Pending() {
+		t.Fatalf("timeout canceled = %v, pending = %v, want true/false", result.IsCanceled(), resolver.Pending())
+	}
+}
+
+// TestStaleTimeoutMessagesAreIgnored verifies old timeout commands cannot affect newer pending state.
+func TestStaleTimeoutMessagesAreIgnored(t *testing.T) {
+	resolver, err := New([]Binding[testAction]{Bind(testGoHome, TextSequence("gh"))})
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+
+	resolver.Update(keyPress("g"))
+	stale := resolverTimeoutMsg{resolverID: resolver.id, generation: resolver.generation - 1}
+	result, cmd := resolver.Update(stale)
+	if cmd != nil {
+		t.Fatal("stale timeout cmd is not nil, want nil")
+	}
+	if !result.IsIdle() || !resolver.Pending() {
+		t.Fatalf("stale timeout idle = %v, pending = %v, want true/true", result.IsIdle(), resolver.Pending())
+	}
+}
+
+// TestOtherResolverTimeoutMessagesAreIgnored verifies timeout identity is resolver-specific.
+func TestOtherResolverTimeoutMessagesAreIgnored(t *testing.T) {
+	first, err := New([]Binding[testAction]{Bind(testGoHome, TextSequence("gh"))})
+	if err != nil {
+		t.Fatalf("first New() error = %v", err)
+	}
+	second, err := New([]Binding[testAction]{Bind(testGoHome, TextSequence("gh"))})
+	if err != nil {
+		t.Fatalf("second New() error = %v", err)
+	}
+
+	first.Update(keyPress("g"))
+	second.Update(keyPress("g"))
+	foreign := resolverTimeoutMsg{resolverID: first.id, generation: second.generation}
+	result, cmd := second.Update(foreign)
+	if cmd != nil {
+		t.Fatal("foreign timeout cmd is not nil, want nil")
+	}
+	if !result.IsIdle() || !second.Pending() {
+		t.Fatalf("foreign timeout idle = %v, pending = %v, want true/true", result.IsIdle(), second.Pending())
+	}
+}
