@@ -34,6 +34,15 @@ func TestNewAcceptsEmptyBindings(t *testing.T) {
 	}
 }
 
+// TestDefaultTimeoutIsHalfSecond verifies the omitted timeout favors responsive ambiguity resolution.
+func TestDefaultTimeoutIsHalfSecond(t *testing.T) {
+	options := defaultResolverOptions()
+
+	if options.timeout != 500*time.Millisecond {
+		t.Fatalf("default timeout = %v, want 500ms", options.timeout)
+	}
+}
+
 // TestNewRejectsInvalidTimeout verifies invalid timeout values are rejected with ErrInvalidOption.
 func TestNewRejectsInvalidTimeout(t *testing.T) {
 	tests := []struct {
@@ -49,6 +58,29 @@ func TestNewRejectsInvalidTimeout(t *testing.T) {
 			_, err := New[testAction](nil, WithTimeout(tt.timeout))
 			if !errors.Is(err, ErrInvalidOption) {
 				t.Fatalf("New() error = %v, want ErrInvalidOption", err)
+			}
+		})
+	}
+}
+
+// TestNewRejectsInvalidCancelKeys verifies cancel-key options use the same key contract as bindings.
+func TestNewRejectsInvalidCancelKeys(t *testing.T) {
+	tests := []struct {
+		name string
+		key  Key
+	}{
+		{name: "empty text key", key: Text("")},
+		{name: "multi-rune text key", key: Text("gg")},
+		{name: "printable code key", key: Code('g')},
+		{name: "modified key without modifier", key: Modified('c', 0)},
+		{name: "unknown key kind", key: Key{}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := New[testAction](nil, WithCancelKeys(tt.key))
+			if !errors.Is(err, ErrInvalidKey) {
+				t.Fatalf("New() error = %v, want ErrInvalidKey", err)
 			}
 		})
 	}
@@ -572,5 +604,111 @@ func TestOtherResolverTimeoutMessagesAreIgnored(t *testing.T) {
 	}
 	if !result.IsIdle() || !second.Pending() {
 		t.Fatalf("foreign timeout idle = %v, pending = %v, want true/true", result.IsIdle(), second.Pending())
+	}
+}
+
+// TestResetClearsPendingAndInvalidatesTimeout verifies reset discards pending state and old timers.
+func TestResetClearsPendingAndInvalidatesTimeout(t *testing.T) {
+	resolver, err := New(
+		[]Binding[testAction]{
+			Bind(testGoHome, TextSequence("g")),
+			Bind(testCopyLine, TextSequence("gh")),
+		},
+		WithTimeout(time.Nanosecond),
+	)
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+
+	_, timeout := resolver.Update(keyPress("g"))
+	if timeout == nil {
+		t.Fatal("Update() cmd = nil, want timeout command")
+	}
+
+	resolver.Reset()
+	if resolver.Pending() {
+		t.Fatal("Pending() = true after Reset(), want false")
+	}
+
+	result, cmd := resolver.Update(timeout())
+	if cmd != nil {
+		t.Fatal("stale reset timeout cmd is not nil, want nil")
+	}
+	if !result.IsIdle() || result.Match(testGoHome) {
+		t.Fatalf("reset timeout idle/match = %v/%v, want true/false", result.IsIdle(), result.Match(testGoHome))
+	}
+}
+
+// TestNewCopiesBindingsForResolverUse verifies caller mutations after New do not affect matching.
+func TestNewCopiesBindingsForResolverUse(t *testing.T) {
+	binding := Bind(testGoHome, TextSequence("gh"))
+	bindings := []Binding[testAction]{binding}
+	resolver, err := New(bindings)
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+
+	bindings[0] = Bind(testCopyLine, TextSequence("yy"))
+	binding.sequence[0] = Text("x")
+
+	resolver.Update(keyPress("g"))
+	result, cmd := resolver.Update(keyPress("h"))
+	if cmd != nil {
+		t.Fatal("Update() cmd is not nil, want nil")
+	}
+	if !result.Match(testGoHome) || result.Match(testCopyLine) {
+		t.Fatalf("match go-home/copy-line = %v/%v, want true/false", result.Match(testGoHome), result.Match(testCopyLine))
+	}
+}
+
+// TestOverlappingPrefixChainPreservesDeepContinuation verifies three-level overlaps keep waiting.
+func TestOverlappingPrefixChainPreservesDeepContinuation(t *testing.T) {
+	resolver, err := New([]Binding[testAction]{
+		Bind(testGoHome, TextSequence("g")),
+		Bind(testCopyLine, TextSequence("gh")),
+		Bind(testDeleteLine, TextSequence("gha")),
+	})
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+
+	result, cmd := resolver.Update(keyPress("g"))
+	if cmd == nil || !result.IsPending() || result.Match(testGoHome) {
+		t.Fatalf("after g: cmd nil/pending/match short = %v/%v/%v, want false/true/false", cmd == nil, result.IsPending(), result.Match(testGoHome))
+	}
+
+	result, cmd = resolver.Update(keyPress("h"))
+	if cmd == nil || !result.IsPending() || result.Match(testCopyLine) {
+		t.Fatalf("after gh: cmd nil/pending/match middle = %v/%v/%v, want false/true/false", cmd == nil, result.IsPending(), result.Match(testCopyLine))
+	}
+
+	result, cmd = resolver.Update(keyPress("a"))
+	if cmd != nil {
+		t.Fatal("after gha cmd is not nil, want nil")
+	}
+	if !result.Match(testDeleteLine) || resolver.Pending() {
+		t.Fatalf("after gha match deep/pending = %v/%v, want true/false", result.Match(testDeleteLine), resolver.Pending())
+	}
+}
+
+// TestOverlappingPrefixChainTimeoutResolvesNearestPendingMatch verifies timeout uses the current exact match.
+func TestOverlappingPrefixChainTimeoutResolvesNearestPendingMatch(t *testing.T) {
+	resolver, err := New([]Binding[testAction]{
+		Bind(testGoHome, TextSequence("g")),
+		Bind(testCopyLine, TextSequence("gh")),
+		Bind(testDeleteLine, TextSequence("gha")),
+	})
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+
+	resolver.Update(keyPress("g"))
+	resolver.Update(keyPress("h"))
+	result, cmd := resolver.Update(resolverTimeoutMsg{resolverID: resolver.id, generation: resolver.generation})
+	if cmd != nil {
+		t.Fatal("timeout cmd is not nil, want nil")
+	}
+	if !result.Match(testCopyLine) || result.Match(testGoHome) || resolver.Pending() {
+		t.Fatalf("timeout match middle/short/pending = %v/%v/%v, want true/false/false", result.Match(testCopyLine), result.Match(testGoHome), resolver.Pending())
 	}
 }

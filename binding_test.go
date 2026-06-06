@@ -11,6 +11,7 @@ type testAction int
 const (
 	testGoHome testAction = iota + 1
 	testCopyLine
+	testDeleteLine
 )
 
 // TestBindStoresActionSequenceAndDescription verifies Bind preserves required binding data.

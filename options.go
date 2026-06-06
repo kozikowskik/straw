@@ -1,13 +1,14 @@
 package straw
 
 import (
+	"errors"
 	"fmt"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
 )
 
-const defaultTimeout = time.Second
+const defaultTimeout = 500 * time.Millisecond
 
 type resolverOptions struct {
 	timeout                  time.Duration
@@ -53,8 +54,18 @@ func buildResolverOptions(options []Option) (resolverOptions, error) {
 	for _, option := range options {
 		option(&resolved)
 	}
+
+	var errs []error
 	if resolved.timeout <= 0 {
-		return resolved, fmt.Errorf("%w: timeout must be greater than zero", ErrInvalidOption)
+		errs = append(errs, fmt.Errorf("%w: timeout must be greater than zero", ErrInvalidOption))
+	}
+	for index, key := range resolved.cancelKeys {
+		if err := validateKey(key); err != nil {
+			errs = append(errs, fmt.Errorf("cancel key %d: %w", index, err))
+		}
+	}
+	if len(errs) > 0 {
+		return resolved, errors.Join(errs...)
 	}
 	return resolved, nil
 }
