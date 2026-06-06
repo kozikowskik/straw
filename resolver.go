@@ -45,8 +45,9 @@ func (r *Resolver[A]) Update(msg tea.Msg) (Result[A], tea.Cmd) {
 		return pendingResult[A](key, attempted), r.timeoutCommand()
 	}
 
+	passThrough := len(r.pendingSeq) == 0 || r.options.failedPendingPassThrough
 	r.pendingSeq = nil
-	return idleResult[A](), nil
+	return unmatchedResult[A](key, attempted, passThrough), nil
 }
 
 // Reset clears any pending sequence state.

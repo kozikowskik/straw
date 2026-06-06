@@ -275,3 +275,64 @@ func TestResolverMatchesSpecialAndModifiedKeys(t *testing.T) {
 func keyPress(text string) tea.KeyPressMsg {
 	return tea.KeyPressMsg(tea.Key{Text: text, Code: []rune(text)[0]})
 }
+
+// TestDirectUnmatchedKeyPassesThrough verifies idle unmatched keys can fall back to host handling.
+func TestDirectUnmatchedKeyPassesThrough(t *testing.T) {
+	resolver, err := New([]Binding[testAction]{Bind(testGoHome, TextSequence("gh"))})
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+
+	result, cmd := resolver.Update(keyPress("j"))
+	if cmd != nil {
+		t.Fatal("Update() cmd is not nil, want nil")
+	}
+	if !result.IsUnmatched() || !result.PassThrough() {
+		t.Fatalf("result unmatched/pass-through = %v/%v, want true/true", result.IsUnmatched(), result.PassThrough())
+	}
+	assertSeqEqual(t, result.Sequence(), TextSequence("j"))
+}
+
+// TestFailedPendingSequenceIsConsumedByDefault verifies failed chords do not pass through by default.
+func TestFailedPendingSequenceIsConsumedByDefault(t *testing.T) {
+	resolver, err := New([]Binding[testAction]{Bind(testGoHome, TextSequence("gh"))})
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+
+	resolver.Update(keyPress("g"))
+	result, cmd := resolver.Update(keyPress("x"))
+	if cmd != nil {
+		t.Fatal("Update() cmd is not nil, want nil")
+	}
+	if !result.IsUnmatched() || result.PassThrough() {
+		t.Fatalf("result unmatched/pass-through = %v/%v, want true/false", result.IsUnmatched(), result.PassThrough())
+	}
+	if resolver.Pending() {
+		t.Fatal("Pending() = true, want false")
+	}
+	assertSeqEqual(t, result.Sequence(), TextSequence("gx"))
+}
+
+// TestFailedPendingSequenceCanPassThrough verifies failed chords can be delegated to host handling.
+func TestFailedPendingSequenceCanPassThrough(t *testing.T) {
+	resolver, err := New(
+		[]Binding[testAction]{Bind(testGoHome, TextSequence("gh"))},
+		WithFailedPendingPassThrough(true),
+	)
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+
+	resolver.Update(keyPress("g"))
+	result, cmd := resolver.Update(keyPress("x"))
+	if cmd != nil {
+		t.Fatal("Update() cmd is not nil, want nil")
+	}
+	if !result.IsUnmatched() || !result.PassThrough() {
+		t.Fatalf("result unmatched/pass-through = %v/%v, want true/true", result.IsUnmatched(), result.PassThrough())
+	}
+	if resolver.Pending() {
+		t.Fatal("Pending() = true, want false")
+	}
+}

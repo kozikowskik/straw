@@ -251,14 +251,22 @@ func ExampleWithCancelKeys() {
 
 // ExampleWithFailedPendingPassThrough demonstrates configuring failed-pending pass-through behavior.
 func ExampleWithFailedPendingPassThrough() {
-	resolver, err := straw.New[string](nil, straw.WithFailedPendingPassThrough(true))
+	resolver, err := straw.New([]straw.Binding[string]{
+		straw.Bind("go-home", straw.TextSequence("gh")),
+	}, straw.WithFailedPendingPassThrough(true))
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
 
-	fmt.Println(err == nil)
-	fmt.Println(resolver.Pending())
+	resolver.Update(tea.KeyPressMsg(tea.Key{Text: "g", Code: 'g'}))
+	result, _ := resolver.Update(tea.KeyPressMsg(tea.Key{Text: "x", Code: 'x'}))
+	fmt.Println(result.IsUnmatched())
+	fmt.Println(result.PassThrough())
 
 	// Output:
 	// true
-	// false
+	// true
 }
 
 // ExampleResolver demonstrates constructing a resolver.
@@ -304,6 +312,23 @@ func ExampleResolver_Update() {
 
 	// Output:
 	// true
+	// true
+	// true
+	// true
+}
+
+// ExampleResolver_Update_unmatched demonstrates passing unmatched input back to the host.
+func ExampleResolver_Update_unmatched() {
+	resolver, _ := straw.New([]straw.Binding[string]{
+		straw.Bind("go-home", straw.TextSequence("gh")),
+	})
+
+	result, cmd := resolver.Update(tea.KeyPressMsg(tea.Key{Text: "j", Code: 'j'}))
+	fmt.Println(result.IsUnmatched())
+	fmt.Println(result.PassThrough())
+	fmt.Println(cmd == nil)
+
+	// Output:
 	// true
 	// true
 	// true
