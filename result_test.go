@@ -95,3 +95,27 @@ func TestResultSequenceReturnsCopy(t *testing.T) {
 
 	assertSeqEqual(t, result.Sequence(), TextSequence("g"))
 }
+
+// TestShouldPassThroughRequiresUnmatchedPassThrough verifies host handling only applies to unmatched pass-through results.
+func TestShouldPassThroughRequiresUnmatchedPassThrough(t *testing.T) {
+	tests := []struct {
+		name   string
+		result Result[testAction]
+		want   bool
+	}{
+		{name: "idle", result: idleResult[testAction](), want: false},
+		{name: "pending", result: pendingResult[testAction](Text("g"), TextSequence("g")), want: false},
+		{name: "matched", result: matchedResult(Bind(testGoHome, TextSequence("gh")), Text("h")), want: false},
+		{name: "unmatched without pass-through", result: unmatchedResult[testAction](Text("x"), TextSequence("gx"), false), want: false},
+		{name: "unmatched with pass-through", result: unmatchedResult[testAction](Text("x"), TextSequence("x"), true), want: true},
+		{name: "canceled", result: canceledResult[testAction](Code(tea.KeyEsc), TextSequence("g")), want: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := ShouldPassThrough(tt.result); got != tt.want {
+				t.Fatalf("ShouldPassThrough() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}

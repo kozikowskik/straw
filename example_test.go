@@ -516,6 +516,17 @@ func ExampleResult_PassThrough() {
 	// false
 }
 
+// ExampleShouldPassThrough demonstrates checking whether host key handling should run.
+func ExampleShouldPassThrough() {
+	resolver, _ := straw.New[string](nil)
+	result, _ := resolver.Update(tea.KeyPressMsg(tea.Key{Text: "x", Code: 'x'}))
+
+	fmt.Println(straw.ShouldPassThrough(result))
+
+	// Output:
+	// true
+}
+
 // ExampleResult_Key demonstrates retrieving the key associated with a result.
 func ExampleResult_Key() {
 	resolver, _ := straw.New[string](nil)

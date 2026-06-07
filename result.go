@@ -96,6 +96,11 @@ func (r Result[A]) PassThrough() bool {
 	return r.passThrough
 }
 
+// ShouldPassThrough reports whether host key handling should run for a result.
+func ShouldPassThrough[A comparable](result Result[A]) bool {
+	return result.IsUnmatched() && result.PassThrough()
+}
+
 // Key returns the latest key that contributed to this result.
 func (r Result[A]) Key() Key {
 	return r.key
