@@ -1,0 +1,41 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Go verification
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Format check
+        run: test -z "$(gofmt -l .)"
+
+      - name: Vet
+        run: go vet ./...
+
+      - name: Test
+        run: go test ./...
+
+      - name: Race test
+        run: go test -race ./...
+
+      - name: Benchmark smoke
+        run: go test -run '^$' -bench=. -benchtime=100ms ./...
+
+      - name: Module hygiene
+        run: go mod tidy -diff && git diff --exit-code -- go.mod go.sum
