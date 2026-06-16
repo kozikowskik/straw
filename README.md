@@ -6,7 +6,7 @@
 
 # straw
 
-Reusable key sequence and chord resolver for Bubble Tea applications.
+Reusable key sequence resolver for Bubble Tea applications with modifier-aware matching.
 
 Bubble Tea emits individual key press messages. `straw` turns those events into higher-level key sequence results such as pending prefix, matched binding, unmatched input, and canceled sequence.
 
@@ -157,6 +157,7 @@ Future versions may replace the current lookup with a trie or another prefix ind
 
 - Matching is exact. `ctrl+c`, `c`, `esc`, and `enter` are different key shapes.
 - Use `TextSequence("gh")` for multi-key text sequences. `Text("gh")` is not a valid single key.
+- Modified keys such as `ctrl+c` and `alt+enter` are supported. Simultaneous non-modifier chords, such as pressing `g+h+d` at the same time, are not supported.
 - Adapter packages ignore Bubble Tea input that cannot be represented as one supported key press, such as pasted text or key release events.
 - Timeout tokens are tied to one resolver and one pending generation. A stale timeout returns `Idle` and should be ignored.
 - The root resolver is mutable. Use it from one update flow at a time, as you normally would inside a Bubble Tea model.

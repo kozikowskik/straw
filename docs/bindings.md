@@ -59,7 +59,7 @@ straw.Sequence(straw.Modified('x', straw.ModAlt))
 
 Modifier constants include values such as `ModCtrl` and `ModAlt`.
 
-## Sequences And Chords
+## Sequences And Modified Keys
 
 Use `Sequence` when you need to combine text, special, and modified keys in one binding.
 
@@ -77,9 +77,9 @@ Use `TextSequence` for the common case where every key is printable text.
 sequence := straw.TextSequence("gd")
 ```
 
-In this documentation, a sequence means ordered key presses. A chord means one key press with modifiers, such as `ctrl+c`.
+In this documentation, a sequence means ordered key presses. `TextSequence("gd")` means the user presses `g`, then `d`.
 
-There is no separate chord builder. Use `Modified` for chord-like keys.
+Modified keys are single key presses with modifiers, such as `ctrl+c` or `alt+enter`. Simultaneous non-modifier chords, such as pressing `g+h+d` at the same time, are not supported.
 
 ## Binding Metadata
 

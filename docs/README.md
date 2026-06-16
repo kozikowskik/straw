@@ -5,7 +5,7 @@ This directory contains focused guides for using `straw` beyond the quick start 
 ## Guides
 
 - [Core concepts](concepts.md): resolver states, sequence matching, timeouts, cancellation, and pass-through behavior.
-- [Bindings](bindings.md): text keys, special keys, modified keys, sequences, chords, and binding metadata.
+- [Bindings](bindings.md): text keys, special keys, modified keys, sequences, and binding metadata.
 - [Bubble Tea integration](bubble-tea.md): adapter imports, update-loop patterns, and v1/v2 differences.
 - [Troubleshooting](troubleshooting.md): common integration issues and how to diagnose them.
 
