@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="logo.png" alt="straw logo" width="240">
+  <img src="logo.png" alt="straw logo" width="400">
 </p>
 
 ---
