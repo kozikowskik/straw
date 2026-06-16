@@ -1,7 +1,5 @@
 package straw
 
-import tea "charm.land/bubbletea/v2"
-
 type keyKind int
 
 const (
@@ -10,12 +8,54 @@ const (
 	keyKindModified
 )
 
-// Key describes one Bubble Tea key press in a binding sequence.
+// Mod describes keyboard modifiers supported by straw's version-neutral key model.
+type Mod uint
+
+const (
+	ModAlt Mod = 1 << iota
+	ModCtrl
+	ModShift
+	ModMeta
+	ModHyper
+	ModSuper
+)
+
+const (
+	KeyBackspace = '\b'
+	KeyTab       = '\t'
+	KeyEnter     = '\r'
+	KeyEsc       = '\x1b'
+	KeySpace     = ' '
+	KeyUp        = 0xF700 + iota
+	KeyDown
+	KeyRight
+	KeyLeft
+	KeyHome
+	KeyEnd
+	KeyPgUp
+	KeyPgDown
+	KeyDelete
+	KeyInsert
+	KeyF1
+	KeyF2
+	KeyF3
+	KeyF4
+	KeyF5
+	KeyF6
+	KeyF7
+	KeyF8
+	KeyF9
+	KeyF10
+	KeyF11
+	KeyF12
+)
+
+// Key describes one version-neutral key press in a binding sequence.
 type Key struct {
 	kind keyKind
 	text string
 	code rune
-	mod  tea.KeyMod
+	mod  Mod
 }
 
 // Seq is an ordered key sequence, such as g then h.
@@ -35,13 +75,13 @@ func TextSequence(value string) Seq {
 	return sequence
 }
 
-// Code builds a Bubble Tea special key.
+// Code builds a special key.
 func Code(code rune) Key {
 	return Key{kind: keyKindCode, code: code}
 }
 
-// Modified builds a key with Bubble Tea modifiers such as ctrl or alt.
-func Modified(code rune, mod tea.KeyMod) Key {
+// Modified builds a key with modifiers such as ctrl or alt.
+func Modified(code rune, mod Mod) Key {
 	return Key{kind: keyKindModified, code: code, mod: mod}
 }
 
@@ -75,6 +115,9 @@ func Description(text string) BindingOption {
 func Bind[A comparable](action A, sequence Seq, opts ...BindingOption) Binding[A] {
 	options := bindingOptions{}
 	for _, opt := range opts {
+		if opt == nil {
+			continue
+		}
 		opt(&options)
 	}
 
@@ -105,4 +148,12 @@ func cloneSeq(sequence []Key) Seq {
 	cloned := make(Seq, len(sequence))
 	copy(cloned, sequence)
 	return cloned
+}
+
+// appendKey returns an owned copy of sequence with key appended.
+func appendKey(sequence Seq, key Key) Seq {
+	appended := make(Seq, len(sequence)+1)
+	copy(appended, sequence)
+	appended[len(sequence)] = key
+	return appended
 }

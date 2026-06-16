@@ -2,10 +2,9 @@ package straw
 
 import (
 	"errors"
+	"sync"
 	"testing"
 	"time"
-
-	tea "charm.land/bubbletea/v2"
 )
 
 // TestNewAcceptsEmptyBindings verifies empty binding lists create an inert resolver.
@@ -63,6 +62,38 @@ func TestNewRejectsInvalidTimeout(t *testing.T) {
 	}
 }
 
+// TestNewRejectsNilOption verifies nil resolver options return a validation error instead of panicking.
+func TestNewRejectsNilOption(t *testing.T) {
+	_, err := New[testAction](nil, nil)
+	if !errors.Is(err, ErrInvalidOption) {
+		t.Fatalf("New() error = %v, want ErrInvalidOption", err)
+	}
+}
+
+// TestNewCanRunConcurrently verifies resolver IDs can be assigned safely from concurrent constructors.
+func TestNewCanRunConcurrently(t *testing.T) {
+	const workers = 32
+
+	var wg sync.WaitGroup
+	errs := make(chan error, workers)
+	for range workers {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			_, err := New([]Binding[testAction]{Bind(testGoHome, TextSequence("gh"))})
+			errs <- err
+		}()
+	}
+	wg.Wait()
+	close(errs)
+
+	for err := range errs {
+		if err != nil {
+			t.Fatalf("New() error = %v, want nil", err)
+		}
+	}
+}
+
 // TestNewRejectsInvalidCancelKeys verifies cancel-key options use the same key contract as bindings.
 func TestNewRejectsInvalidCancelKeys(t *testing.T) {
 	tests := []struct {
@@ -72,6 +103,7 @@ func TestNewRejectsInvalidCancelKeys(t *testing.T) {
 		{name: "empty text key", key: Text("")},
 		{name: "multi-rune text key", key: Text("gg")},
 		{name: "printable code key", key: Code('g')},
+		{name: "zero code key", key: Code(0)},
 		{name: "modified key without modifier", key: Modified('c', 0)},
 		{name: "unknown key kind", key: Key{}},
 	}
@@ -90,7 +122,7 @@ func TestNewRejectsInvalidCancelKeys(t *testing.T) {
 func TestNewAcceptsResolverOptions(t *testing.T) {
 	resolver, err := New[testAction](nil,
 		WithTimeout(250*time.Millisecond),
-		WithCancelKeys(Code(tea.KeyEsc), Modified('c', tea.ModCtrl)),
+		WithCancelKeys(Code(KeyEsc), Modified('c', ModCtrl)),
 		WithFailedPendingPassThrough(true),
 	)
 	if err != nil {
@@ -104,7 +136,7 @@ func TestNewAcceptsResolverOptions(t *testing.T) {
 // TestNewAcceptsSpaceCodeBinding verifies space is represented with Code rather than Text.
 func TestNewAcceptsSpaceCodeBinding(t *testing.T) {
 	resolver, err := New([]Binding[testAction]{
-		Bind(testGoHome, Sequence(Code(tea.KeySpace))),
+		Bind(testGoHome, Sequence(Code(KeySpace))),
 	})
 	if err != nil {
 		t.Fatalf("New() error = %v, want nil", err)
@@ -149,6 +181,11 @@ func TestNewRejectsInvalidBindings(t *testing.T) {
 		{
 			name:     "printable code key",
 			bindings: []Binding[testAction]{Bind(testGoHome, Sequence(Code('g')))},
+			wantErr:  ErrInvalidKey,
+		},
+		{
+			name:     "zero code key",
+			bindings: []Binding[testAction]{Bind(testGoHome, Sequence(Code(0)))},
 			wantErr:  ErrInvalidKey,
 		},
 		{
@@ -212,18 +249,18 @@ func TestResolverMatchesSimpleSequence(t *testing.T) {
 		t.Fatalf("New() error = %v", err)
 	}
 
-	result, cmd := resolver.Update(keyPress("g"))
-	if cmd == nil {
-		t.Fatal("first Update() cmd = nil, want timeout command")
+	result, timeout := resolver.UpdateKey(keyPress("g"))
+	if !timeout.Scheduled() {
+		t.Fatal("first UpdateKey() timeout was not scheduled")
 	}
 	if !result.IsPending() || !resolver.Pending() {
 		t.Fatalf("after g: result pending = %v, resolver pending = %v", result.IsPending(), resolver.Pending())
 	}
 	assertSeqEqual(t, result.Sequence(), TextSequence("g"))
 
-	result, cmd = resolver.Update(keyPress("h"))
-	if cmd != nil {
-		t.Fatal("second Update() cmd is not nil, want nil")
+	result, timeout = resolver.UpdateKey(keyPress("h"))
+	if timeout.Scheduled() {
+		t.Fatal("second UpdateKey() timeout was scheduled")
 	}
 	if !result.Match(testGoHome) || resolver.Pending() {
 		t.Fatalf("after h: Match = %v, Pending = %v", result.Match(testGoHome), resolver.Pending())
@@ -234,19 +271,16 @@ func TestResolverMatchesSimpleSequence(t *testing.T) {
 	assertSeqEqual(t, result.Sequence(), TextSequence("gh"))
 }
 
-// TestResolverIgnoresNonKeyMessages verifies unrelated Bubble Tea messages do not affect state.
-func TestResolverIgnoresNonKeyMessages(t *testing.T) {
+// TestResolverRejectsForgedTimeout verifies arbitrary timeout tokens do not affect state.
+func TestResolverRejectsForgedTimeout(t *testing.T) {
 	resolver, err := New([]Binding[testAction]{Bind(testGoHome, TextSequence("g"))})
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
 
-	result, cmd := resolver.Update(struct{}{})
-	if cmd != nil {
-		t.Fatal("Update() cmd is not nil, want nil")
-	}
+	result := resolver.UpdateTimeout(Timeout[testAction]{})
 	if !result.IsIdle() || resolver.Pending() {
-		t.Fatalf("Update() idle = %v, resolver pending = %v, want idle/false", result.IsIdle(), resolver.Pending())
+		t.Fatalf("UpdateTimeout() idle = %v, resolver pending = %v, want idle/false", result.IsIdle(), resolver.Pending())
 	}
 }
 
@@ -257,31 +291,31 @@ func TestResolverMatchesSingleKeySequence(t *testing.T) {
 		t.Fatalf("New() error = %v", err)
 	}
 
-	result, cmd := resolver.Update(keyPress("g"))
-	if cmd != nil {
-		t.Fatal("Update() cmd is not nil, want nil")
+	result, timeout := resolver.UpdateKey(keyPress("g"))
+	if timeout.Scheduled() {
+		t.Fatal("UpdateKey() timeout was scheduled")
 	}
 	if !result.Match(testGoHome) || resolver.Pending() {
 		t.Fatalf("Match = %v, Pending = %v, want true/false", result.Match(testGoHome), resolver.Pending())
 	}
 }
 
-// TestResolverMatchesSpecialAndModifiedKeys verifies key conversion for non-text key presses.
+// TestResolverMatchesSpecialAndModifiedKeys verifies non-text root keys match.
 func TestResolverMatchesSpecialAndModifiedKeys(t *testing.T) {
 	tests := []struct {
 		name    string
 		binding Binding[testAction]
-		message tea.KeyPressMsg
+		key     Key
 	}{
 		{
 			name:    "special key",
-			binding: Bind(testGoHome, Sequence(Code(tea.KeyEsc))),
-			message: tea.KeyPressMsg(tea.Key{Code: tea.KeyEsc}),
+			binding: Bind(testGoHome, Sequence(Code(KeyEsc))),
+			key:     Code(KeyEsc),
 		},
 		{
 			name:    "modified key",
-			binding: Bind(testGoHome, Sequence(Modified('c', tea.ModCtrl))),
-			message: tea.KeyPressMsg(tea.Key{Code: 'c', Mod: tea.ModCtrl}),
+			binding: Bind(testGoHome, Sequence(Modified('c', ModCtrl))),
+			key:     Modified('c', ModCtrl),
 		},
 	}
 
@@ -292,9 +326,9 @@ func TestResolverMatchesSpecialAndModifiedKeys(t *testing.T) {
 				t.Fatalf("New() error = %v", err)
 			}
 
-			result, cmd := resolver.Update(tt.message)
-			if cmd != nil {
-				t.Fatal("Update() cmd is not nil, want nil")
+			result, timeout := resolver.UpdateKey(tt.key)
+			if timeout.Scheduled() {
+				t.Fatal("UpdateKey() timeout was scheduled")
 			}
 			if !result.Match(testGoHome) {
 				t.Fatal("Match(testGoHome) = false, want true")
@@ -305,12 +339,12 @@ func TestResolverMatchesSpecialAndModifiedKeys(t *testing.T) {
 
 // TestModifierMatchingIsExact verifies extra modifiers do not match a narrower binding.
 func TestModifierMatchingIsExact(t *testing.T) {
-	resolver, err := New([]Binding[testAction]{Bind(testGoHome, Sequence(Modified('c', tea.ModCtrl)))})
+	resolver, err := New([]Binding[testAction]{Bind(testGoHome, Sequence(Modified('c', ModCtrl)))})
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
 
-	result, _ := resolver.Update(tea.KeyPressMsg(tea.Key{Code: 'c', Mod: tea.ModCtrl | tea.ModAlt}))
+	result, _ := resolver.UpdateKey(Modified('c', ModCtrl|ModAlt))
 	if result.Match(testGoHome) {
 		t.Fatal("ctrl+alt+c matched ctrl+c binding, want no match")
 	}
@@ -319,9 +353,9 @@ func TestModifierMatchingIsExact(t *testing.T) {
 	}
 }
 
-// keyPress builds a printable Bubble Tea key message for resolver tests.
-func keyPress(text string) tea.KeyPressMsg {
-	return tea.KeyPressMsg(tea.Key{Text: text, Code: []rune(text)[0]})
+// keyPress builds a root text key for resolver tests.
+func keyPress(text string) Key {
+	return Text(text)
 }
 
 // TestDirectUnmatchedKeyPassesThrough verifies idle unmatched keys can fall back to host handling.
@@ -331,9 +365,9 @@ func TestDirectUnmatchedKeyPassesThrough(t *testing.T) {
 		t.Fatalf("New() error = %v", err)
 	}
 
-	result, cmd := resolver.Update(keyPress("j"))
-	if cmd != nil {
-		t.Fatal("Update() cmd is not nil, want nil")
+	result, timeout := resolver.UpdateKey(keyPress("j"))
+	if timeout.Scheduled() {
+		t.Fatal("UpdateKey() timeout was scheduled")
 	}
 	if !result.IsUnmatched() || !result.PassThrough() {
 		t.Fatalf("result unmatched/pass-through = %v/%v, want true/true", result.IsUnmatched(), result.PassThrough())
@@ -348,10 +382,10 @@ func TestFailedPendingSequenceIsConsumedByDefault(t *testing.T) {
 		t.Fatalf("New() error = %v", err)
 	}
 
-	resolver.Update(keyPress("g"))
-	result, cmd := resolver.Update(keyPress("x"))
-	if cmd != nil {
-		t.Fatal("Update() cmd is not nil, want nil")
+	resolver.UpdateKey(keyPress("g"))
+	result, timeout := resolver.UpdateKey(keyPress("x"))
+	if timeout.Scheduled() {
+		t.Fatal("UpdateKey() timeout was scheduled")
 	}
 	if !result.IsUnmatched() || result.PassThrough() {
 		t.Fatalf("result unmatched/pass-through = %v/%v, want true/false", result.IsUnmatched(), result.PassThrough())
@@ -372,10 +406,10 @@ func TestFailedPendingSequenceCanPassThrough(t *testing.T) {
 		t.Fatalf("New() error = %v", err)
 	}
 
-	resolver.Update(keyPress("g"))
-	result, cmd := resolver.Update(keyPress("x"))
-	if cmd != nil {
-		t.Fatal("Update() cmd is not nil, want nil")
+	resolver.UpdateKey(keyPress("g"))
+	result, timeout := resolver.UpdateKey(keyPress("x"))
+	if timeout.Scheduled() {
+		t.Fatal("UpdateKey() timeout was scheduled")
 	}
 	if !result.IsUnmatched() || !result.PassThrough() {
 		t.Fatalf("result unmatched/pass-through = %v/%v, want true/true", result.IsUnmatched(), result.PassThrough())
@@ -392,10 +426,10 @@ func TestDefaultCancelKeyCancelsPendingSequence(t *testing.T) {
 		t.Fatalf("New() error = %v", err)
 	}
 
-	resolver.Update(keyPress("g"))
-	result, cmd := resolver.Update(tea.KeyPressMsg(tea.Key{Code: tea.KeyEsc}))
-	if cmd != nil {
-		t.Fatal("Update() cmd is not nil, want nil")
+	resolver.UpdateKey(keyPress("g"))
+	result, timeout := resolver.UpdateKey(Code(KeyEsc))
+	if timeout.Scheduled() {
+		t.Fatal("UpdateKey() timeout was scheduled")
 	}
 	if !result.IsCanceled() || resolver.Pending() {
 		t.Fatalf("result canceled = %v, resolver pending = %v", result.IsCanceled(), resolver.Pending())
@@ -407,16 +441,16 @@ func TestDefaultCancelKeyCancelsPendingSequence(t *testing.T) {
 func TestDefaultCancelKeyTakesPrecedenceWhilePending(t *testing.T) {
 	resolver, err := New([]Binding[testAction]{
 		Bind(testGoHome, TextSequence("gh")),
-		Bind(testCopyLine, Sequence(Text("g"), Code(tea.KeyEsc))),
+		Bind(testCopyLine, Sequence(Text("g"), Code(KeyEsc))),
 	})
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
 
-	resolver.Update(keyPress("g"))
-	result, cmd := resolver.Update(tea.KeyPressMsg(tea.Key{Code: tea.KeyEsc}))
-	if cmd != nil {
-		t.Fatal("Update() cmd is not nil, want nil")
+	resolver.UpdateKey(keyPress("g"))
+	result, timeout := resolver.UpdateKey(Code(KeyEsc))
+	if timeout.Scheduled() {
+		t.Fatal("UpdateKey() timeout was scheduled")
 	}
 	if !result.IsCanceled() || result.Match(testCopyLine) {
 		t.Fatalf("result canceled/match copy-line = %v/%v, want true/false", result.IsCanceled(), result.Match(testCopyLine))
@@ -431,16 +465,16 @@ func TestDefaultCancelKeyTakesPrecedenceWhilePending(t *testing.T) {
 func TestConfiguredCancelKeyCancelsPendingSequence(t *testing.T) {
 	resolver, err := New(
 		[]Binding[testAction]{Bind(testGoHome, TextSequence("gh"))},
-		WithCancelKeys(Modified('c', tea.ModCtrl)),
+		WithCancelKeys(Modified('c', ModCtrl)),
 	)
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
 
-	resolver.Update(keyPress("g"))
-	result, cmd := resolver.Update(tea.KeyPressMsg(tea.Key{Code: 'c', Mod: tea.ModCtrl}))
-	if cmd != nil {
-		t.Fatal("Update() cmd is not nil, want nil")
+	resolver.UpdateKey(keyPress("g"))
+	result, timeout := resolver.UpdateKey(Modified('c', ModCtrl))
+	if timeout.Scheduled() {
+		t.Fatal("UpdateKey() timeout was scheduled")
 	}
 	if !result.IsCanceled() || resolver.Pending() {
 		t.Fatalf("result canceled = %v, resolver pending = %v", result.IsCanceled(), resolver.Pending())
@@ -450,12 +484,12 @@ func TestConfiguredCancelKeyCancelsPendingSequence(t *testing.T) {
 
 // TestCancelKeyDoesNotCancelWhileIdle verifies cancel keys can still be normal bindings when idle.
 func TestCancelKeyDoesNotCancelWhileIdle(t *testing.T) {
-	resolver, err := New([]Binding[testAction]{Bind(testGoHome, Sequence(Code(tea.KeyEsc)))})
+	resolver, err := New([]Binding[testAction]{Bind(testGoHome, Sequence(Code(KeyEsc)))})
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
 
-	result, _ := resolver.Update(tea.KeyPressMsg(tea.Key{Code: tea.KeyEsc}))
+	result, _ := resolver.UpdateKey(Code(KeyEsc))
 	if !result.Match(testGoHome) {
 		t.Fatalf("Match(testGoHome) = false, want true")
 	}
@@ -464,15 +498,15 @@ func TestCancelKeyDoesNotCancelWhileIdle(t *testing.T) {
 // TestCancelKeysCanBeDisabled verifies callers can bind cancel-key input when cancellation is off.
 func TestCancelKeysCanBeDisabled(t *testing.T) {
 	resolver, err := New(
-		[]Binding[testAction]{Bind(testGoHome, Sequence(Text("g"), Code(tea.KeyEsc)))},
+		[]Binding[testAction]{Bind(testGoHome, Sequence(Text("g"), Code(KeyEsc)))},
 		WithCancelKeys(),
 	)
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
 
-	resolver.Update(keyPress("g"))
-	result, _ := resolver.Update(tea.KeyPressMsg(tea.Key{Code: tea.KeyEsc}))
+	resolver.UpdateKey(keyPress("g"))
+	result, _ := resolver.UpdateKey(Code(KeyEsc))
 	if !result.Match(testGoHome) {
 		t.Fatalf("Match(testGoHome) = false, want true")
 	}
@@ -488,17 +522,17 @@ func TestAmbiguousMatchWaitsForContinuation(t *testing.T) {
 		t.Fatalf("New() error = %v", err)
 	}
 
-	result, cmd := resolver.Update(keyPress("g"))
-	if cmd == nil {
-		t.Fatal("Update() cmd = nil, want timeout command")
+	result, timeout := resolver.UpdateKey(keyPress("g"))
+	if !timeout.Scheduled() {
+		t.Fatal("UpdateKey() timeout was not scheduled")
 	}
 	if !result.IsPending() || result.Match(testGoHome) {
 		t.Fatalf("after g: pending = %v, match short = %v, want pending true and match false", result.IsPending(), result.Match(testGoHome))
 	}
 
-	result, cmd = resolver.Update(keyPress("h"))
-	if cmd != nil {
-		t.Fatal("Update() cmd is not nil, want nil")
+	result, timeout = resolver.UpdateKey(keyPress("h"))
+	if timeout.Scheduled() {
+		t.Fatal("UpdateKey() timeout was scheduled")
 	}
 	if !result.Match(testCopyLine) {
 		t.Fatalf("Match(testCopyLine) = false, want true")
@@ -515,18 +549,15 @@ func TestAmbiguousMatchResolvesShortBindingOnTimeout(t *testing.T) {
 		t.Fatalf("New() error = %v", err)
 	}
 
-	resolver.Update(keyPress("g"))
-	result, cmd := resolver.Update(resolverTimeoutMsg{resolverID: resolver.id, generation: resolver.generation})
-	if cmd != nil {
-		t.Fatal("timeout Update() cmd is not nil, want nil")
-	}
+	resolver.UpdateKey(keyPress("g"))
+	result := resolver.UpdateTimeout(Timeout[testAction]{resolverID: resolver.id, generation: resolver.generation})
 	if !result.Match(testGoHome) || resolver.Pending() {
 		t.Fatalf("timeout match short = %v, pending = %v, want true/false", result.Match(testGoHome), resolver.Pending())
 	}
 }
 
-// TestReturnedTimeoutCommandResolvesPendingMatch verifies timeout commands emit usable messages.
-func TestReturnedTimeoutCommandResolvesPendingMatch(t *testing.T) {
+// TestReturnedTimeoutTokenResolvesPendingMatch verifies timeout tokens can resolve pending matches.
+func TestReturnedTimeoutTokenResolvesPendingMatch(t *testing.T) {
 	resolver, err := New(
 		[]Binding[testAction]{
 			Bind(testGoHome, TextSequence("g")),
@@ -538,15 +569,15 @@ func TestReturnedTimeoutCommandResolvesPendingMatch(t *testing.T) {
 		t.Fatalf("New() error = %v", err)
 	}
 
-	_, cmd := resolver.Update(keyPress("g"))
-	if cmd == nil {
-		t.Fatal("Update() cmd = nil, want timeout command")
+	_, timeout := resolver.UpdateKey(keyPress("g"))
+	if !timeout.Scheduled() {
+		t.Fatal("UpdateKey() timeout was not scheduled")
+	}
+	if timeout.Duration() != time.Nanosecond {
+		t.Fatalf("timeout duration = %v, want 1ns", timeout.Duration())
 	}
 
-	result, next := resolver.Update(cmd())
-	if next != nil {
-		t.Fatal("timeout Update() cmd is not nil, want nil")
-	}
+	result := resolver.UpdateTimeout(timeout)
 	if !result.Match(testGoHome) || resolver.Pending() {
 		t.Fatalf("timeout command match short = %v, pending = %v, want true/false", result.Match(testGoHome), resolver.Pending())
 	}
@@ -559,8 +590,8 @@ func TestPurePrefixCancelsOnTimeout(t *testing.T) {
 		t.Fatalf("New() error = %v", err)
 	}
 
-	resolver.Update(keyPress("g"))
-	result, _ := resolver.Update(resolverTimeoutMsg{resolverID: resolver.id, generation: resolver.generation})
+	resolver.UpdateKey(keyPress("g"))
+	result := resolver.UpdateTimeout(Timeout[testAction]{resolverID: resolver.id, generation: resolver.generation})
 	if !result.IsCanceled() || resolver.Pending() {
 		t.Fatalf("timeout canceled = %v, pending = %v, want true/false", result.IsCanceled(), resolver.Pending())
 	}
@@ -573,12 +604,9 @@ func TestStaleTimeoutMessagesAreIgnored(t *testing.T) {
 		t.Fatalf("New() error = %v", err)
 	}
 
-	resolver.Update(keyPress("g"))
-	stale := resolverTimeoutMsg{resolverID: resolver.id, generation: resolver.generation - 1}
-	result, cmd := resolver.Update(stale)
-	if cmd != nil {
-		t.Fatal("stale timeout cmd is not nil, want nil")
-	}
+	resolver.UpdateKey(keyPress("g"))
+	stale := Timeout[testAction]{resolverID: resolver.id, generation: resolver.generation - 1}
+	result := resolver.UpdateTimeout(stale)
 	if !result.IsIdle() || !resolver.Pending() {
 		t.Fatalf("stale timeout idle = %v, pending = %v, want true/true", result.IsIdle(), resolver.Pending())
 	}
@@ -595,13 +623,10 @@ func TestOtherResolverTimeoutMessagesAreIgnored(t *testing.T) {
 		t.Fatalf("second New() error = %v", err)
 	}
 
-	first.Update(keyPress("g"))
-	second.Update(keyPress("g"))
-	foreign := resolverTimeoutMsg{resolverID: first.id, generation: second.generation}
-	result, cmd := second.Update(foreign)
-	if cmd != nil {
-		t.Fatal("foreign timeout cmd is not nil, want nil")
-	}
+	first.UpdateKey(keyPress("g"))
+	second.UpdateKey(keyPress("g"))
+	foreign := Timeout[testAction]{resolverID: first.id, generation: second.generation}
+	result := second.UpdateTimeout(foreign)
 	if !result.IsIdle() || !second.Pending() {
 		t.Fatalf("foreign timeout idle = %v, pending = %v, want true/true", result.IsIdle(), second.Pending())
 	}
@@ -620,9 +645,9 @@ func TestResetClearsPendingAndInvalidatesTimeout(t *testing.T) {
 		t.Fatalf("New() error = %v", err)
 	}
 
-	_, timeout := resolver.Update(keyPress("g"))
-	if timeout == nil {
-		t.Fatal("Update() cmd = nil, want timeout command")
+	_, timeout := resolver.UpdateKey(keyPress("g"))
+	if !timeout.Scheduled() {
+		t.Fatal("UpdateKey() timeout was not scheduled")
 	}
 
 	resolver.Reset()
@@ -630,10 +655,7 @@ func TestResetClearsPendingAndInvalidatesTimeout(t *testing.T) {
 		t.Fatal("Pending() = true after Reset(), want false")
 	}
 
-	result, cmd := resolver.Update(timeout())
-	if cmd != nil {
-		t.Fatal("stale reset timeout cmd is not nil, want nil")
-	}
+	result := resolver.UpdateTimeout(timeout)
 	if !result.IsIdle() || result.Match(testGoHome) {
 		t.Fatalf("reset timeout idle/match = %v/%v, want true/false", result.IsIdle(), result.Match(testGoHome))
 	}
@@ -651,10 +673,10 @@ func TestNewCopiesBindingsForResolverUse(t *testing.T) {
 	bindings[0] = Bind(testCopyLine, TextSequence("yy"))
 	binding.sequence[0] = Text("x")
 
-	resolver.Update(keyPress("g"))
-	result, cmd := resolver.Update(keyPress("h"))
-	if cmd != nil {
-		t.Fatal("Update() cmd is not nil, want nil")
+	resolver.UpdateKey(keyPress("g"))
+	result, timeout := resolver.UpdateKey(keyPress("h"))
+	if timeout.Scheduled() {
+		t.Fatal("UpdateKey() timeout was scheduled")
 	}
 	if !result.Match(testGoHome) || result.Match(testCopyLine) {
 		t.Fatalf("match go-home/copy-line = %v/%v, want true/false", result.Match(testGoHome), result.Match(testCopyLine))
@@ -672,19 +694,19 @@ func TestOverlappingPrefixChainPreservesDeepContinuation(t *testing.T) {
 		t.Fatalf("New() error = %v", err)
 	}
 
-	result, cmd := resolver.Update(keyPress("g"))
-	if cmd == nil || !result.IsPending() || result.Match(testGoHome) {
-		t.Fatalf("after g: cmd nil/pending/match short = %v/%v/%v, want false/true/false", cmd == nil, result.IsPending(), result.Match(testGoHome))
+	result, timeout := resolver.UpdateKey(keyPress("g"))
+	if !timeout.Scheduled() || !result.IsPending() || result.Match(testGoHome) {
+		t.Fatalf("after g: timeout scheduled/pending/match short = %v/%v/%v, want true/true/false", timeout.Scheduled(), result.IsPending(), result.Match(testGoHome))
 	}
 
-	result, cmd = resolver.Update(keyPress("h"))
-	if cmd == nil || !result.IsPending() || result.Match(testCopyLine) {
-		t.Fatalf("after gh: cmd nil/pending/match middle = %v/%v/%v, want false/true/false", cmd == nil, result.IsPending(), result.Match(testCopyLine))
+	result, timeout = resolver.UpdateKey(keyPress("h"))
+	if !timeout.Scheduled() || !result.IsPending() || result.Match(testCopyLine) {
+		t.Fatalf("after gh: timeout scheduled/pending/match middle = %v/%v/%v, want true/true/false", timeout.Scheduled(), result.IsPending(), result.Match(testCopyLine))
 	}
 
-	result, cmd = resolver.Update(keyPress("a"))
-	if cmd != nil {
-		t.Fatal("after gha cmd is not nil, want nil")
+	result, timeout = resolver.UpdateKey(keyPress("a"))
+	if timeout.Scheduled() {
+		t.Fatal("after gha timeout was scheduled")
 	}
 	if !result.Match(testDeleteLine) || resolver.Pending() {
 		t.Fatalf("after gha match deep/pending = %v/%v, want true/false", result.Match(testDeleteLine), resolver.Pending())
@@ -702,12 +724,9 @@ func TestOverlappingPrefixChainTimeoutResolvesNearestPendingMatch(t *testing.T) 
 		t.Fatalf("New() error = %v", err)
 	}
 
-	resolver.Update(keyPress("g"))
-	resolver.Update(keyPress("h"))
-	result, cmd := resolver.Update(resolverTimeoutMsg{resolverID: resolver.id, generation: resolver.generation})
-	if cmd != nil {
-		t.Fatal("timeout cmd is not nil, want nil")
-	}
+	resolver.UpdateKey(keyPress("g"))
+	resolver.UpdateKey(keyPress("h"))
+	result := resolver.UpdateTimeout(Timeout[testAction]{resolverID: resolver.id, generation: resolver.generation})
 	if !result.Match(testCopyLine) || result.Match(testGoHome) || resolver.Pending() {
 		t.Fatalf("timeout match middle/short/pending = %v/%v/%v, want true/false/false", result.Match(testCopyLine), result.Match(testGoHome), resolver.Pending())
 	}

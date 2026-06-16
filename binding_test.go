@@ -1,10 +1,6 @@
 package straw
 
-import (
-	"testing"
-
-	tea "charm.land/bubbletea/v2"
-)
+import "testing"
 
 type testAction int
 
@@ -38,6 +34,18 @@ func TestBindAllowsNoDescription(t *testing.T) {
 		t.Fatalf("Action() = %v, want %v", binding.Action(), testCopyLine)
 	}
 
+	if binding.Description() != "" {
+		t.Fatalf("Description() = %q, want empty string", binding.Description())
+	}
+}
+
+// TestBindIgnoresNilOptions verifies optional binding metadata cannot panic when omitted with nil.
+func TestBindIgnoresNilOptions(t *testing.T) {
+	binding := Bind(testGoHome, TextSequence("gh"), nil)
+
+	if binding.Action() != testGoHome {
+		t.Fatalf("Action() = %v, want %v", binding.Action(), testGoHome)
+	}
 	if binding.Description() != "" {
 		t.Fatalf("Description() = %q, want empty string", binding.Description())
 	}
@@ -79,17 +87,17 @@ func TestSequenceSupportsExplicitKeyConstructors(t *testing.T) {
 
 // TestCodeAndModifiedKeysCanBeStoredInSequence verifies non-text key builders compose in sequences.
 func TestCodeAndModifiedKeysCanBeStoredInSequence(t *testing.T) {
-	sequence := Sequence(Code(tea.KeyEsc), Modified('c', tea.ModCtrl))
+	sequence := Sequence(Code(KeyEsc), Modified('c', ModCtrl))
 
 	if len(sequence) != 2 {
 		t.Fatalf("sequence length = %d, want 2", len(sequence))
 	}
 
-	if sequence[0] != Code(tea.KeyEsc) {
+	if sequence[0] != Code(KeyEsc) {
 		t.Fatalf("sequence[0] = %#v, want esc code key", sequence[0])
 	}
 
-	if sequence[1] != Modified('c', tea.ModCtrl) {
+	if sequence[1] != Modified('c', ModCtrl) {
 		t.Fatalf("sequence[1] = %#v, want ctrl+c modified key", sequence[1])
 	}
 }

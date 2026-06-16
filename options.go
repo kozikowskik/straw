@@ -4,8 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"time"
-
-	tea "charm.land/bubbletea/v2"
 )
 
 const defaultTimeout = 500 * time.Millisecond
@@ -44,18 +42,22 @@ func WithFailedPendingPassThrough(enabled bool) Option {
 func defaultResolverOptions() resolverOptions {
 	return resolverOptions{
 		timeout:    defaultTimeout,
-		cancelKeys: Sequence(Code(tea.KeyEsc)),
+		cancelKeys: Sequence(Code(KeyEsc)),
 	}
 }
 
 // buildResolverOptions applies caller options and validates the resolved configuration.
 func buildResolverOptions(options []Option) (resolverOptions, error) {
 	resolved := defaultResolverOptions()
-	for _, option := range options {
+	var errs []error
+	for index, option := range options {
+		if option == nil {
+			errs = append(errs, fmt.Errorf("%w: option %d is nil", ErrInvalidOption, index))
+			continue
+		}
 		option(&resolved)
 	}
 
-	var errs []error
 	if resolved.timeout <= 0 {
 		errs = append(errs, fmt.Errorf("%w: timeout must be greater than zero", ErrInvalidOption))
 	}

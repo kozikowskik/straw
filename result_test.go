@@ -1,10 +1,6 @@
 package straw
 
-import (
-	"testing"
-
-	tea "charm.land/bubbletea/v2"
-)
+import "testing"
 
 // TestIdleResultContract verifies idle results expose no match or pass-through behavior.
 func TestIdleResultContract(t *testing.T) {
@@ -79,7 +75,7 @@ func TestUnmatchedAndCanceledResultContracts(t *testing.T) {
 	}
 	assertSeqEqual(t, unmatched.Sequence(), TextSequence("gx"))
 
-	canceled := canceledResult[testAction](Code(tea.KeyEsc), TextSequence("g"))
+	canceled := canceledResult[testAction](Code(KeyEsc), TextSequence("g"))
 	if !canceled.IsCanceled() || canceled.PassThrough() {
 		t.Fatalf("canceled state/pass-through = %v/%v, want canceled/false", canceled.State(), canceled.PassThrough())
 	}
@@ -108,7 +104,7 @@ func TestShouldPassThroughRequiresUnmatchedPassThrough(t *testing.T) {
 		{name: "matched", result: matchedResult(Bind(testGoHome, TextSequence("gh")), Text("h")), want: false},
 		{name: "unmatched without pass-through", result: unmatchedResult[testAction](Text("x"), TextSequence("gx"), false), want: false},
 		{name: "unmatched with pass-through", result: unmatchedResult[testAction](Text("x"), TextSequence("x"), true), want: true},
-		{name: "canceled", result: canceledResult[testAction](Code(tea.KeyEsc), TextSequence("g")), want: false},
+		{name: "canceled", result: canceledResult[testAction](Code(KeyEsc), TextSequence("g")), want: false},
 	}
 
 	for _, tt := range tests {

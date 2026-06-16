@@ -1,16 +1,17 @@
 package straw
 
 import (
+	"sync/atomic"
 	"time"
-
-	tea "charm.land/bubbletea/v2"
 )
 
 var nextResolverID uint64
 
-type resolverTimeoutMsg struct {
+// Timeout is an opaque token returned by UpdateKey when an adapter should schedule a timeout.
+type Timeout[A comparable] struct {
 	resolverID uint64
 	generation uint64
+	duration   time.Duration
 }
 
 // Resolver tracks key sequence state for application-owned actions.
@@ -36,50 +37,56 @@ func New[A comparable](bindings []Binding[A], opts ...Option) (*Resolver[A], err
 		return nil, err
 	}
 
-	nextResolverID++
+	id := atomic.AddUint64(&nextResolverID, 1)
 
-	return &Resolver[A]{options: options, index: index, id: nextResolverID}, nil
+	return &Resolver[A]{options: options, index: index, id: id}, nil
 }
 
-// Update accepts Bubble Tea messages and returns the resolver result plus command.
-func (r *Resolver[A]) Update(msg tea.Msg) (Result[A], tea.Cmd) {
-	if timeout, ok := msg.(resolverTimeoutMsg); ok {
-		return r.handleTimeout(timeout)
-	}
-
-	keyMsg, ok := msg.(tea.KeyPressMsg)
-	if !ok {
-		return idleResult[A](), nil
-	}
-
-	key := keyPressMsgToKey(keyMsg)
+// UpdateKey accepts one version-neutral key press and returns a resolver result plus optional timeout token.
+func (r *Resolver[A]) UpdateKey(key Key) (Result[A], Timeout[A]) {
 	if len(r.pendingSeq) > 0 && seqContains(r.options.cancelKeys, key) {
-		canceled := cloneSeq(r.pendingSeq)
+		result := canceledResult[A](key, r.pendingSeq)
 		r.clearPending()
-		return canceledResult[A](key, canceled), nil
+		return result, Timeout[A]{}
 	}
 
-	attempted := append(cloneSeq(r.pendingSeq), key)
-	status := r.index.lookup(attempted)
+	status := r.index.lookupWithKey(r.pendingSeq, key)
 
 	if status.hasMatch && !status.hasPrefix {
 		r.clearPending()
-		return matchedResult(status.binding, key), nil
+		return matchedResult(status.binding, key), Timeout[A]{}
 	}
 
 	if status.hasPrefix {
+		attempted := appendKey(r.pendingSeq, key)
 		r.pendingSeq = attempted
 		r.hasPendingMatch = status.hasMatch
 		if status.hasMatch {
 			r.pendingMatch = status.binding
 		}
 		r.generation++
-		return pendingResult[A](key, attempted), r.timeoutCommand()
+		return pendingResult[A](key, attempted), r.timeoutToken()
 	}
 
 	passThrough := len(r.pendingSeq) == 0 || r.options.failedPendingPassThrough
+	if len(r.pendingSeq) == 0 {
+		r.clearPending()
+		return unmatchedKeyResult[A](key, passThrough), Timeout[A]{}
+	}
+	result := unmatchedTailResult[A](key, r.pendingSeq, passThrough)
 	r.clearPending()
-	return unmatchedResult[A](key, attempted, passThrough), nil
+	return result, Timeout[A]{}
+}
+
+// UpdateTimeout resolves or ignores timeout tokens for the current pending sequence.
+func (r *Resolver[A]) UpdateTimeout(timeout Timeout[A]) Result[A] {
+	if !r.acceptsTimeout(timeout) {
+		return idleResult[A]()
+	}
+	if r.hasPendingMatch {
+		return r.resolvePendingMatch()
+	}
+	return r.cancelPendingTimeout()
 }
 
 // Reset clears any pending sequence state.
@@ -92,34 +99,33 @@ func (r *Resolver[A]) Pending() bool {
 	return len(r.pendingSeq) > 0
 }
 
-// handleTimeout resolves or ignores timeout messages for the current pending sequence.
-func (r *Resolver[A]) handleTimeout(timeout resolverTimeoutMsg) (Result[A], tea.Cmd) {
-	if !r.acceptsTimeout(timeout) {
-		return idleResult[A](), nil
-	}
-	if r.hasPendingMatch {
-		return r.resolvePendingMatch()
-	}
-	return r.cancelPendingTimeout()
+// Scheduled reports whether this timeout token should be scheduled by an adapter.
+func (t Timeout[A]) Scheduled() bool {
+	return t.resolverID != 0
 }
 
-// acceptsTimeout reports whether a timeout message belongs to the active pending generation.
-func (r *Resolver[A]) acceptsTimeout(timeout resolverTimeoutMsg) bool {
+// Duration returns the timeout duration configured on the resolver that emitted this token.
+func (t Timeout[A]) Duration() time.Duration {
+	return t.duration
+}
+
+// acceptsTimeout reports whether a timeout token belongs to the active pending generation.
+func (r *Resolver[A]) acceptsTimeout(timeout Timeout[A]) bool {
 	return timeout.resolverID == r.id && timeout.generation == r.generation && len(r.pendingSeq) > 0
 }
 
 // resolvePendingMatch accepts the exact binding that was waiting for possible continuation.
-func (r *Resolver[A]) resolvePendingMatch() (Result[A], tea.Cmd) {
+func (r *Resolver[A]) resolvePendingMatch() Result[A] {
 	binding := r.pendingMatch
 	r.clearPending()
-	return matchedResult(binding, Key{}), nil
+	return matchedResult(binding, Key{})
 }
 
 // cancelPendingTimeout cancels a pending prefix that did not have an exact match to resolve.
-func (r *Resolver[A]) cancelPendingTimeout() (Result[A], tea.Cmd) {
-	canceled := cloneSeq(r.pendingSeq)
+func (r *Resolver[A]) cancelPendingTimeout() Result[A] {
+	result := canceledResult[A](Key{}, r.pendingSeq)
 	r.clearPending()
-	return canceledResult[A](Key{}, canceled), nil
+	return result
 }
 
 // clearPending removes pending sequence state and invalidates outstanding timeout messages.
@@ -130,24 +136,7 @@ func (r *Resolver[A]) clearPending() {
 	r.generation++
 }
 
-// timeoutCommand returns a command that resolves the current pending generation after the timeout.
-func (r *Resolver[A]) timeoutCommand() tea.Cmd {
-	resolverID := r.id
-	generation := r.generation
-	duration := r.options.timeout
-	return tea.Tick(duration, func(time.Time) tea.Msg {
-		return resolverTimeoutMsg{resolverID: resolverID, generation: generation}
-	})
-}
-
-// keyPressMsgToKey converts Bubble Tea key press data into the resolver's key model.
-func keyPressMsgToKey(msg tea.KeyPressMsg) Key {
-	key := msg.Key()
-	if key.Mod != 0 {
-		return Modified(key.Code, key.Mod)
-	}
-	if key.Text != "" {
-		return Text(key.Text)
-	}
-	return Code(key.Code)
+// timeoutToken returns an opaque token for the current pending generation.
+func (r *Resolver[A]) timeoutToken() Timeout[A] {
+	return Timeout[A]{resolverID: r.id, generation: r.generation, duration: r.options.timeout}
 }

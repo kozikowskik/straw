@@ -3,8 +3,6 @@ package straw
 import (
 	"strconv"
 	"testing"
-
-	tea "charm.land/bubbletea/v2"
 )
 
 const (
@@ -22,16 +20,16 @@ var benchmarkAlphabet = []rune("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUV
 var benchmarkResultSink Result[benchmarkAction]
 var benchmarkResolverSink *Resolver[benchmarkAction]
 var benchmarkErrorSink error
-var benchmarkCmdSink tea.Cmd
+var benchmarkTimeoutSink Timeout[benchmarkAction]
 
-// benchmarkKeyPress builds a printable Bubble Tea key press message.
-func benchmarkKeyPress(text string) tea.KeyPressMsg {
-	return tea.KeyPressMsg(tea.Key{Text: text, Code: []rune(text)[0]})
+// benchmarkKeyPress builds a root text key.
+func benchmarkKeyPress(text string) Key {
+	return Text(text)
 }
 
-// benchmarkCodePress builds a special-key Bubble Tea key press message.
-func benchmarkCodePress(code rune) tea.KeyPressMsg {
-	return tea.KeyPressMsg(tea.Key{Code: code})
+// benchmarkCodePress builds a root special key.
+func benchmarkCodePress(code rune) Key {
+	return Code(code)
 }
 
 // benchmarkCountName returns a stable sub-benchmark name for a binding count.
@@ -101,6 +99,19 @@ func benchmarkAmbiguousPrefixBindings(count int) []Binding[benchmarkAction] {
 	return bindings
 }
 
+// benchmarkLongSharedPrefixBindings creates bindings that share a long common prefix.
+func benchmarkLongSharedPrefixBindings(count int) []Binding[benchmarkAction] {
+	prefix := TextSequence("abcdefghijkl")
+	base := len(benchmarkAlphabet)
+	bindings := make([]Binding[benchmarkAction], 0, count)
+	for i := range count {
+		sequence := appendKey(prefix, Text(string(benchmarkAlphabet[i%base])))
+		sequence = appendKey(sequence, Text(string(benchmarkAlphabet[(i/base)%base])))
+		bindings = append(bindings, Bind(benchmarkAction(i), sequence))
+	}
+	return bindings
+}
+
 // benchmarkNewResolver builds a resolver and fails the benchmark on setup errors.
 func benchmarkNewResolver(b *testing.B, bindings []Binding[benchmarkAction], opts ...Option) *Resolver[benchmarkAction] {
 	b.Helper()
@@ -112,21 +123,21 @@ func benchmarkNewResolver(b *testing.B, bindings []Binding[benchmarkAction], opt
 }
 
 // benchmarkPreparePendingPrefix seeds pending state without per-iteration setup allocation.
-func benchmarkPreparePendingPrefix(resolver *Resolver[benchmarkAction], sequence Seq) resolverTimeoutMsg {
+func benchmarkPreparePendingPrefix(resolver *Resolver[benchmarkAction], sequence Seq) Timeout[benchmarkAction] {
 	resolver.pendingSeq = sequence
 	resolver.pendingMatch = Binding[benchmarkAction]{}
 	resolver.hasPendingMatch = false
 	resolver.generation++
-	return resolverTimeoutMsg{resolverID: resolver.id, generation: resolver.generation}
+	return Timeout[benchmarkAction]{resolverID: resolver.id, generation: resolver.generation}
 }
 
 // benchmarkPreparePendingMatch seeds an ambiguous pending match without invoking Update.
-func benchmarkPreparePendingMatch(resolver *Resolver[benchmarkAction], sequence Seq, binding Binding[benchmarkAction]) resolverTimeoutMsg {
+func benchmarkPreparePendingMatch(resolver *Resolver[benchmarkAction], sequence Seq, binding Binding[benchmarkAction]) Timeout[benchmarkAction] {
 	resolver.pendingSeq = sequence
 	resolver.pendingMatch = binding
 	resolver.hasPendingMatch = true
 	resolver.generation++
-	return resolverTimeoutMsg{resolverID: resolver.id, generation: resolver.generation}
+	return Timeout[benchmarkAction]{resolverID: resolver.id, generation: resolver.generation}
 }
 
 // BenchmarkNew measures resolver validation, cloning, duplicate detection, and index construction.
@@ -159,15 +170,15 @@ func BenchmarkUpdateExactSingleKey(b *testing.B) {
 			b.ReportAllocs()
 			b.ResetTimer()
 			var result Result[benchmarkAction]
-			var cmd tea.Cmd
+			var timeout Timeout[benchmarkAction]
 			for range b.N {
-				result, cmd = resolver.Update(msg)
+				result, timeout = resolver.UpdateKey(msg)
 			}
 			b.StopTimer()
 			benchmarkResultSink = result
-			benchmarkCmdSink = cmd
-			if !result.Match(benchmarkTargetAction) || resolver.Pending() || cmd != nil {
-				b.Fatalf("Update() match/pending/cmdNil = %v/%v/%v, want true/false/true", result.Match(benchmarkTargetAction), resolver.Pending(), cmd == nil)
+			benchmarkTimeoutSink = timeout
+			if !result.Match(benchmarkTargetAction) || resolver.Pending() || timeout.Scheduled() {
+				b.Fatalf("Update() match/pending/cmdNil = %v/%v/%v, want true/false/true", result.Match(benchmarkTargetAction), resolver.Pending(), !timeout.Scheduled())
 			}
 		})
 	}
@@ -185,16 +196,16 @@ func BenchmarkUpdateExactMultiKeyFinal(b *testing.B) {
 			b.ReportAllocs()
 			b.ResetTimer()
 			var result Result[benchmarkAction]
-			var cmd tea.Cmd
+			var timeout Timeout[benchmarkAction]
 			for range b.N {
 				benchmarkPreparePendingPrefix(resolver, pendingSeq)
-				result, cmd = resolver.Update(finalMsg)
+				result, timeout = resolver.UpdateKey(finalMsg)
 			}
 			b.StopTimer()
 			benchmarkResultSink = result
-			benchmarkCmdSink = cmd
-			if !result.Match(benchmarkTargetAction) || resolver.Pending() || cmd != nil {
-				b.Fatalf("Update() match/pending/cmdNil = %v/%v/%v, want true/false/true", result.Match(benchmarkTargetAction), resolver.Pending(), cmd == nil)
+			benchmarkTimeoutSink = timeout
+			if !result.Match(benchmarkTargetAction) || resolver.Pending() || timeout.Scheduled() {
+				b.Fatalf("Update() match/pending/cmdNil = %v/%v/%v, want true/false/true", result.Match(benchmarkTargetAction), resolver.Pending(), !timeout.Scheduled())
 			}
 		})
 	}
@@ -205,19 +216,19 @@ func BenchmarkUpdateUnmatchedIdle(b *testing.B) {
 	for _, count := range benchmarkBindingCounts {
 		bindings := benchmarkGeneratedBindings(count, 0)
 		resolver := benchmarkNewResolver(b, bindings)
-		msg := benchmarkCodePress(tea.KeyEsc)
+		msg := benchmarkCodePress(KeyEsc)
 
 		b.Run(benchmarkCountName(count), func(b *testing.B) {
 			b.ReportAllocs()
 			b.ResetTimer()
 			var result Result[benchmarkAction]
-			var cmd tea.Cmd
+			var timeout Timeout[benchmarkAction]
 			for range b.N {
-				result, cmd = resolver.Update(msg)
+				result, timeout = resolver.UpdateKey(msg)
 			}
 			b.StopTimer()
 			benchmarkResultSink = result
-			benchmarkCmdSink = cmd
+			benchmarkTimeoutSink = timeout
 			if !result.IsUnmatched() || resolver.Pending() || !result.PassThrough() {
 				b.Fatalf("Update() unmatched/pending/passThrough = %v/%v/%v, want true/false/true", result.IsUnmatched(), resolver.Pending(), result.PassThrough())
 			}
@@ -231,20 +242,20 @@ func BenchmarkUpdateUnmatchedPending(b *testing.B) {
 	for _, count := range counts {
 		bindings := benchmarkPendingPrefixBindings(count)
 		pendingSeq := TextSequence("g")
-		finalMsg := benchmarkCodePress(tea.KeyTab)
+		finalMsg := benchmarkCodePress(KeyTab)
 		b.Run(benchmarkCountName(count), func(b *testing.B) {
 			resolver := benchmarkNewResolver(b, bindings)
 			b.ReportAllocs()
 			b.ResetTimer()
 			var result Result[benchmarkAction]
-			var cmd tea.Cmd
+			var timeout Timeout[benchmarkAction]
 			for range b.N {
 				benchmarkPreparePendingPrefix(resolver, pendingSeq)
-				result, cmd = resolver.Update(finalMsg)
+				result, timeout = resolver.UpdateKey(finalMsg)
 			}
 			b.StopTimer()
 			benchmarkResultSink = result
-			benchmarkCmdSink = cmd
+			benchmarkTimeoutSink = timeout
 			if !result.IsUnmatched() || resolver.Pending() || result.PassThrough() {
 				b.Fatalf("Update() unmatched/pending/passThrough = %v/%v/%v, want true/false/false", result.IsUnmatched(), resolver.Pending(), result.PassThrough())
 			}
@@ -263,16 +274,16 @@ func BenchmarkUpdatePendingPrefix(b *testing.B) {
 			b.ReportAllocs()
 			b.ResetTimer()
 			var result Result[benchmarkAction]
-			var cmd tea.Cmd
+			var timeout Timeout[benchmarkAction]
 			for range b.N {
 				resolver.Reset()
-				result, cmd = resolver.Update(msg)
+				result, timeout = resolver.UpdateKey(msg)
 			}
 			b.StopTimer()
 			benchmarkResultSink = result
-			benchmarkCmdSink = cmd
-			if !result.IsPending() || !resolver.Pending() || cmd == nil {
-				b.Fatalf("Update() pending/resolverPending/cmdNil = %v/%v/%v, want true/true/false", result.IsPending(), resolver.Pending(), cmd == nil)
+			benchmarkTimeoutSink = timeout
+			if !result.IsPending() || !resolver.Pending() || !timeout.Scheduled() {
+				b.Fatalf("Update() pending/resolverPending/cmdNil = %v/%v/%v, want true/true/false", result.IsPending(), resolver.Pending(), !timeout.Scheduled())
 			}
 		})
 	}
@@ -289,18 +300,89 @@ func BenchmarkUpdateAmbiguousPrefix(b *testing.B) {
 			b.ReportAllocs()
 			b.ResetTimer()
 			var result Result[benchmarkAction]
-			var cmd tea.Cmd
+			var timeout Timeout[benchmarkAction]
 			for range b.N {
 				resolver.Reset()
-				result, cmd = resolver.Update(msg)
+				result, timeout = resolver.UpdateKey(msg)
 			}
 			b.StopTimer()
 			benchmarkResultSink = result
-			benchmarkCmdSink = cmd
-			if !result.IsPending() || !resolver.Pending() || cmd == nil {
-				b.Fatalf("Update() pending/resolverPending/cmdNil = %v/%v/%v, want true/true/false", result.IsPending(), resolver.Pending(), cmd == nil)
+			benchmarkTimeoutSink = timeout
+			if !result.IsPending() || !resolver.Pending() || !timeout.Scheduled() {
+				b.Fatalf("Update() pending/resolverPending/cmdNil = %v/%v/%v, want true/true/false", result.IsPending(), resolver.Pending(), !timeout.Scheduled())
 			}
 		})
+	}
+}
+
+// BenchmarkUpdateLongSharedPrefix measures lookup when many bindings share the same long prefix.
+func BenchmarkUpdateLongSharedPrefix(b *testing.B) {
+	counts := []int{10, 100, 1_000}
+	for _, count := range counts {
+		bindings := benchmarkLongSharedPrefixBindings(count)
+		resolver := benchmarkNewResolver(b, bindings)
+		pendingSeq := TextSequence("abcdefghijkl")
+		msg := benchmarkKeyPress(string(benchmarkAlphabet[0]))
+
+		b.Run(benchmarkCountName(count), func(b *testing.B) {
+			b.ReportAllocs()
+			b.ResetTimer()
+			var result Result[benchmarkAction]
+			var timeout Timeout[benchmarkAction]
+			for range b.N {
+				benchmarkPreparePendingPrefix(resolver, pendingSeq)
+				result, timeout = resolver.UpdateKey(msg)
+			}
+			b.StopTimer()
+			benchmarkResultSink = result
+			benchmarkTimeoutSink = timeout
+			if !result.IsPending() || !resolver.Pending() || !timeout.Scheduled() {
+				b.Fatalf("Update() pending/resolverPending/cmd = %v/%v/%v, want true/true/true", result.IsPending(), resolver.Pending(), timeout.Scheduled())
+			}
+		})
+	}
+}
+
+// BenchmarkUpdateLongSequenceFinal measures final-key lookup for a long sequence.
+func BenchmarkUpdateLongSequenceFinal(b *testing.B) {
+	sequence := TextSequence("abcdefghijklmnop")
+	pendingSeq := sequence[:len(sequence)-1]
+	finalMsg := sequence[len(sequence)-1]
+	resolver := benchmarkNewResolver(b, []Binding[benchmarkAction]{Bind(benchmarkTargetAction, sequence)})
+
+	b.ReportAllocs()
+	b.ResetTimer()
+	var result Result[benchmarkAction]
+	var timeout Timeout[benchmarkAction]
+	for range b.N {
+		benchmarkPreparePendingPrefix(resolver, pendingSeq)
+		result, timeout = resolver.UpdateKey(finalMsg)
+	}
+	b.StopTimer()
+	benchmarkResultSink = result
+	benchmarkTimeoutSink = timeout
+	if !result.Match(benchmarkTargetAction) || resolver.Pending() || timeout.Scheduled() {
+		b.Fatalf("Update() match/pending/cmdNil = %v/%v/%v, want true/false/true", result.Match(benchmarkTargetAction), resolver.Pending(), !timeout.Scheduled())
+	}
+}
+
+// BenchmarkUpdateUnicodeText measures matching a Unicode text key.
+func BenchmarkUpdateUnicodeText(b *testing.B) {
+	resolver := benchmarkNewResolver(b, []Binding[benchmarkAction]{Bind(benchmarkTargetAction, TextSequence("λ"))})
+	msg := benchmarkKeyPress("λ")
+
+	b.ReportAllocs()
+	b.ResetTimer()
+	var result Result[benchmarkAction]
+	var timeout Timeout[benchmarkAction]
+	for range b.N {
+		result, timeout = resolver.UpdateKey(msg)
+	}
+	b.StopTimer()
+	benchmarkResultSink = result
+	benchmarkTimeoutSink = timeout
+	if !result.Match(benchmarkTargetAction) || resolver.Pending() || timeout.Scheduled() {
+		b.Fatalf("Update() match/pending/cmdNil = %v/%v/%v, want true/false/true", result.Match(benchmarkTargetAction), resolver.Pending(), !timeout.Scheduled())
 	}
 }
 
@@ -313,16 +395,17 @@ func BenchmarkTimeoutResolvePendingMatch(b *testing.B) {
 	b.ReportAllocs()
 	b.ResetTimer()
 	var result Result[benchmarkAction]
-	var cmd tea.Cmd
+	var timeout Timeout[benchmarkAction]
 	for range b.N {
-		timeout := benchmarkPreparePendingMatch(resolver, pendingSeq, pendingMatch)
-		result, cmd = resolver.Update(timeout)
+		timeout = benchmarkPreparePendingMatch(resolver, pendingSeq, pendingMatch)
+		result = resolver.UpdateTimeout(timeout)
+		timeout = Timeout[benchmarkAction]{}
 	}
 	b.StopTimer()
 	benchmarkResultSink = result
-	benchmarkCmdSink = cmd
-	if !result.Match(benchmarkPrefixAction) || resolver.Pending() || cmd != nil {
-		b.Fatalf("timeout match/pending/cmdNil = %v/%v/%v, want true/false/true", result.Match(benchmarkPrefixAction), resolver.Pending(), cmd == nil)
+	benchmarkTimeoutSink = timeout
+	if !result.Match(benchmarkPrefixAction) || resolver.Pending() || timeout.Scheduled() {
+		b.Fatalf("timeout match/pending/cmdNil = %v/%v/%v, want true/false/true", result.Match(benchmarkPrefixAction), resolver.Pending(), !timeout.Scheduled())
 	}
 }
 
@@ -334,16 +417,17 @@ func BenchmarkTimeoutCancelPendingPrefix(b *testing.B) {
 	b.ReportAllocs()
 	b.ResetTimer()
 	var result Result[benchmarkAction]
-	var cmd tea.Cmd
+	var timeout Timeout[benchmarkAction]
 	for range b.N {
-		timeout := benchmarkPreparePendingPrefix(resolver, pendingSeq)
-		result, cmd = resolver.Update(timeout)
+		timeout = benchmarkPreparePendingPrefix(resolver, pendingSeq)
+		result = resolver.UpdateTimeout(timeout)
+		timeout = Timeout[benchmarkAction]{}
 	}
 	b.StopTimer()
 	benchmarkResultSink = result
-	benchmarkCmdSink = cmd
-	if !result.IsCanceled() || resolver.Pending() || cmd != nil {
-		b.Fatalf("timeout canceled/pending/cmdNil = %v/%v/%v, want true/false/true", result.IsCanceled(), resolver.Pending(), cmd == nil)
+	benchmarkTimeoutSink = timeout
+	if !result.IsCanceled() || resolver.Pending() || timeout.Scheduled() {
+		b.Fatalf("timeout canceled/pending/cmdNil = %v/%v/%v, want true/false/true", result.IsCanceled(), resolver.Pending(), !timeout.Scheduled())
 	}
 }
 
@@ -351,21 +435,22 @@ func BenchmarkTimeoutCancelPendingPrefix(b *testing.B) {
 func BenchmarkTimeoutIgnoreStale(b *testing.B) {
 	bindings := benchmarkPendingPrefixBindings(100)
 	resolver := benchmarkNewResolver(b, bindings)
-	_, pendingCmd := resolver.Update(benchmarkKeyPress("g"))
-	benchmarkCmdSink = pendingCmd
-	staleTimeout := resolverTimeoutMsg{resolverID: resolver.id, generation: resolver.generation - 1}
+	_, pendingTimeout := resolver.UpdateKey(benchmarkKeyPress("g"))
+	benchmarkTimeoutSink = pendingTimeout
+	staleTimeout := Timeout[benchmarkAction]{resolverID: resolver.id, generation: resolver.generation - 1}
 
 	b.ReportAllocs()
 	b.ResetTimer()
 	var result Result[benchmarkAction]
-	var cmd tea.Cmd
+	var timeout Timeout[benchmarkAction]
 	for range b.N {
-		result, cmd = resolver.Update(staleTimeout)
+		result = resolver.UpdateTimeout(staleTimeout)
+		timeout = Timeout[benchmarkAction]{}
 	}
 	b.StopTimer()
 	benchmarkResultSink = result
-	benchmarkCmdSink = cmd
-	if !result.IsIdle() || !resolver.Pending() || cmd != nil {
-		b.Fatalf("stale timeout idle/pending/cmdNil = %v/%v/%v, want true/true/true", result.IsIdle(), resolver.Pending(), cmd == nil)
+	benchmarkTimeoutSink = timeout
+	if !result.IsIdle() || !resolver.Pending() || timeout.Scheduled() {
+		b.Fatalf("stale timeout idle/pending/cmdNil = %v/%v/%v, want true/true/true", result.IsIdle(), resolver.Pending(), !timeout.Scheduled())
 	}
 }

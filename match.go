@@ -6,8 +6,6 @@ import (
 	"strings"
 	"unicode"
 	"unicode/utf8"
-
-	tea "charm.land/bubbletea/v2"
 )
 
 type bindingIndex[A comparable] struct {
@@ -27,7 +25,7 @@ func newBindingIndex[A comparable](bindings []Binding[A]) (*bindingIndex[A], err
 	cloned := make([]Binding[A], len(bindings))
 
 	for bindingIndex, binding := range bindings {
-		sequence := binding.Sequence()
+		sequence := binding.sequence
 		if len(sequence) == 0 {
 			errs = append(errs, fmt.Errorf("%w: binding %d has empty sequence", ErrInvalidBinding, bindingIndex))
 		}
@@ -44,7 +42,11 @@ func newBindingIndex[A comparable](bindings []Binding[A]) (*bindingIndex[A], err
 			seen[fingerprint] = bindingIndex
 		}
 
-		cloned[bindingIndex] = Bind(binding.Action(), sequence, Description(binding.Description()))
+		cloned[bindingIndex] = Binding[A]{
+			action:      binding.action,
+			sequence:    cloneSeq(sequence),
+			description: binding.description,
+		}
 	}
 
 	if len(errs) > 0 {
@@ -58,12 +60,28 @@ func newBindingIndex[A comparable](bindings []Binding[A]) (*bindingIndex[A], err
 func (i *bindingIndex[A]) lookup(sequence Seq) matchStatus[A] {
 	status := matchStatus[A]{}
 	for _, binding := range i.bindings {
-		bindingSequence := binding.Sequence()
+		bindingSequence := binding.sequence
 		if seqEqual(bindingSequence, sequence) {
 			status.binding = binding
 			status.hasMatch = true
 		}
 		if len(bindingSequence) > len(sequence) && seqHasPrefix(bindingSequence, sequence) {
+			status.hasPrefix = true
+		}
+	}
+	return status
+}
+
+// lookupWithKey checks the current attempt without allocating a combined sequence.
+func (i *bindingIndex[A]) lookupWithKey(prefix Seq, key Key) matchStatus[A] {
+	status := matchStatus[A]{}
+	for _, binding := range i.bindings {
+		bindingSequence := binding.sequence
+		if seqEqualWithKey(bindingSequence, prefix, key) {
+			status.binding = binding
+			status.hasMatch = true
+		}
+		if len(bindingSequence) > len(prefix)+1 && seqHasPrefixWithKey(bindingSequence, prefix, key) {
 			status.hasPrefix = true
 		}
 	}
@@ -85,6 +103,9 @@ func validateKey(key Key) error {
 			return fmt.Errorf("%w: whitespace text keys are invalid", ErrInvalidKey)
 		}
 	case keyKindCode:
+		if key.code == 0 {
+			return fmt.Errorf("%w: Code(0) is invalid", ErrInvalidKey)
+		}
 		if isPrintableRegularKeyCode(key.code) {
 			return fmt.Errorf("%w: Code(%q) is printable; use Text", ErrInvalidKey, key.code)
 		}
@@ -100,7 +121,7 @@ func validateKey(key Key) error {
 
 // isPrintableRegularKeyCode catches text-like keys that should use Text instead of Code.
 func isPrintableRegularKeyCode(code rune) bool {
-	return code != tea.KeySpace && unicode.IsPrint(code)
+	return code != KeySpace && unicode.IsPrint(code)
 }
 
 // seqEqual reports whether two key sequences contain the same keys in order.
@@ -127,6 +148,32 @@ func seqHasPrefix(sequence Seq, prefix Seq) bool {
 		}
 	}
 	return true
+}
+
+// seqEqualWithKey reports whether sequence equals prefix followed by key.
+func seqEqualWithKey(sequence Seq, prefix Seq, key Key) bool {
+	if len(sequence) != len(prefix)+1 {
+		return false
+	}
+	for index := range prefix {
+		if sequence[index] != prefix[index] {
+			return false
+		}
+	}
+	return sequence[len(prefix)] == key
+}
+
+// seqHasPrefixWithKey reports whether sequence starts with prefix followed by key.
+func seqHasPrefixWithKey(sequence Seq, prefix Seq, key Key) bool {
+	if len(prefix)+1 > len(sequence) {
+		return false
+	}
+	for index := range prefix {
+		if sequence[index] != prefix[index] {
+			return false
+		}
+	}
+	return sequence[len(prefix)] == key
 }
 
 // seqContains reports whether a key sequence contains a specific key.

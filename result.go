@@ -18,12 +18,14 @@ const (
 
 // Result describes the outcome of a resolver update.
 type Result[A comparable] struct {
-	state       State
-	binding     Binding[A]
-	hasBinding  bool
-	key         Key
-	sequence    Seq
-	passThrough bool
+	state        State
+	binding      Binding[A]
+	hasBinding   bool
+	key          Key
+	sequence     Seq
+	sequenceKey  bool
+	sequenceTail bool
+	passThrough  bool
 }
 
 // idleResult builds the default no-op result.
@@ -33,22 +35,32 @@ func idleResult[A comparable]() Result[A] {
 
 // pendingResult records a partial sequence that may match after more keys.
 func pendingResult[A comparable](key Key, sequence Seq) Result[A] {
-	return Result[A]{state: Pending, key: key, sequence: cloneSeq(sequence)}
+	return Result[A]{state: Pending, key: key, sequence: sequence}
 }
 
 // matchedResult records the binding matched by the latest key.
 func matchedResult[A comparable](binding Binding[A], key Key) Result[A] {
-	return Result[A]{state: Matched, binding: binding, hasBinding: true, key: key, sequence: binding.Sequence()}
+	return Result[A]{state: Matched, binding: binding, hasBinding: true, key: key, sequence: binding.sequence}
 }
 
 // unmatchedResult records a failed sequence and whether the latest key should pass through.
 func unmatchedResult[A comparable](key Key, sequence Seq, passThrough bool) Result[A] {
-	return Result[A]{state: Unmatched, key: key, sequence: cloneSeq(sequence), passThrough: passThrough}
+	return Result[A]{state: Unmatched, key: key, sequence: sequence, passThrough: passThrough}
+}
+
+// unmatchedTailResult records a failed pending sequence without eagerly appending the latest key.
+func unmatchedTailResult[A comparable](key Key, sequence Seq, passThrough bool) Result[A] {
+	return Result[A]{state: Unmatched, key: key, sequence: sequence, sequenceTail: true, passThrough: passThrough}
+}
+
+// unmatchedKeyResult records an idle unmatched key without allocating a one-key sequence.
+func unmatchedKeyResult[A comparable](key Key, passThrough bool) Result[A] {
+	return Result[A]{state: Unmatched, key: key, sequenceKey: true, passThrough: passThrough}
 }
 
 // canceledResult records a pending sequence canceled by the latest key.
 func canceledResult[A comparable](key Key, sequence Seq) Result[A] {
-	return Result[A]{state: Canceled, key: key, sequence: cloneSeq(sequence)}
+	return Result[A]{state: Canceled, key: key, sequence: sequence}
 }
 
 // Match reports whether the result matched the given action.
@@ -108,5 +120,11 @@ func (r Result[A]) Key() Key {
 
 // Sequence returns a copy of the key sequence associated with this result.
 func (r Result[A]) Sequence() Seq {
+	if r.sequenceKey {
+		return Sequence(r.key)
+	}
+	if r.sequenceTail {
+		return appendKey(r.sequence, r.key)
+	}
 	return cloneSeq(r.sequence)
 }
