@@ -49,7 +49,7 @@ Benchmark results are not currently enforced in CI. Treat them as local evidence
 
 Before opening a pull request, please check:
 
-- `go test ./...` passes.
+- `go test ./...` passes for the root package and both Bubble Tea adapter packages.
 - Changed Go files are formatted with `gofmt`.
 - Public API changes include tests and examples.
 - Documentation is updated when behavior or user-facing commands change.

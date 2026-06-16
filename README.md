@@ -16,7 +16,19 @@ Bubble Tea emits individual key press messages. `straw` turns those events into 
 go get github.com/kozikowskik/straw
 ```
 
-`straw` currently targets Bubble Tea v2 via `charm.land/bubbletea/v2`.
+Bubble Tea v2 users should import the v2 adapter:
+
+```go
+import straw "github.com/kozikowskik/straw/bubbletea/v2"
+```
+
+Bubble Tea v1 users should import the v1 adapter:
+
+```go
+import straw "github.com/kozikowskik/straw/bubbletea/v1"
+```
+
+The root `github.com/kozikowskik/straw` package contains the version-neutral resolver core for advanced use and adapter authors. If you need both packages in one file, import the root package as `strawcore`.
 
 ## Quick Start
 
@@ -29,7 +41,7 @@ import (
 	"fmt"
 
 	tea "charm.land/bubbletea/v2"
-	"github.com/kozikowskik/straw"
+	straw "github.com/kozikowskik/straw/bubbletea/v2"
 )
 
 type action string
@@ -46,7 +58,7 @@ type model struct {
 func newModel() (model, error) {
 	resolver, err := straw.New([]straw.Binding[action]{
 		straw.Bind(goHome, straw.TextSequence("gh"), straw.Description("go home action")),
-		straw.Bind(goDashboard, straw.Text("gd"), straw.Description("go dashboard action")),
+		straw.Bind(goDashboard, straw.TextSequence("gd"), straw.Description("go dashboard action")),
 	})
 	if err != nil {
 		return model{}, err
@@ -56,36 +68,45 @@ func newModel() (model, error) {
 
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	result, cmd := m.resolver.Update(msg)
-	if cmd != nil {
-		return m, cmd
-	}
 
 	switch {
 	case result.Match(goHome):
 		fmt.Println("go home action")
-		return m, nil
+		return m, cmd
 	case result.Match(goDashboard):
 		fmt.Println("go dashboard action")
-		return m, nil
+		return m, cmd
 	}
 
 	// Only unmatched pass-through keys should reach the host key switch.
 	// Pending prefixes and matched-but-unhandled bindings stay consumed by straw.
-	if straw.ShouldPassThrough(result) {
-		switch msg := msg.(type) {
-		case tea.KeyPressMsg:
-			switch msg.String() {
-			case "ctrl+c", "q":
-				return m, tea.Quit
-			}
+	if !straw.ShouldPassThrough(result) {
+		return m, cmd
+	}
+
+	switch msg := msg.(type) {
+	case tea.KeyPressMsg:
+		switch msg.String() {
+		case "ctrl+c", "q":
+			return m, tea.Quit
 		}
 	}
 
-	return m, nil
+	return m, cmd
 }
 ```
 
 The resolver only reports key sequence outcomes. Your application owns the actions and decides which Bubble Tea commands to return.
+
+Runnable examples are available in [`examples/bubbletea-v2`](examples/bubbletea-v2), [`examples/bubbletea-v1`](examples/bubbletea-v1), and [`examples/timeout-cancel`](examples/timeout-cancel):
+
+```sh
+go run ./examples/bubbletea-v2
+go run ./examples/bubbletea-v1
+go run ./examples/timeout-cancel
+```
+
+Detailed guides are available in [`docs/`](docs/): [core concepts](docs/concepts.md), [bindings](docs/bindings.md), [Bubble Tea integration](docs/bubble-tea.md), and [troubleshooting](docs/troubleshooting.md).
 
 ## API Overview
 
@@ -95,15 +116,18 @@ The resolver only reports key sequence outcomes. Your application owns the actio
 - `Binding[A]` maps an application-owned action to a sequence.
 - `Bind` creates bindings and accepts optional metadata such as `Description`.
 - `New` validates bindings and builds a `Resolver[A]`.
-- `Resolver.Update` accepts Bubble Tea messages and returns a `Result[A]` plus an optional `tea.Cmd`.
+- Adapter `Resolver.Update` methods accept Bubble Tea messages and return a `Result[A]` plus an optional `tea.Cmd`.
+- Root `Resolver.UpdateKey` and `Resolver.UpdateTimeout` expose the version-neutral resolver core for non-Bubble Tea code.
+- `Timeout[A]` tells adapter authors and root resolver users when to schedule pending-sequence timeout work.
+- `Resolver.Reset` clears any pending sequence when your screen or mode changes.
 - `Result[A]` reports whether input is idle, pending, matched, unmatched, or canceled.
 - `ShouldPassThrough` reports whether normal host key handling should run for a result.
 
 ## Resolver Behavior
 
-`Resolver.Update` returns one of these result states:
+Adapter `Resolver.Update`, root `Resolver.UpdateKey`, and root `Resolver.UpdateTimeout` all return `Result[A]`, but they reach `Idle` in different situations:
 
-- `Idle`: the message was not a key press or relevant timeout.
+- `Idle`: adapter input was not a key press, or a timeout token was stale or unrelated to the current pending sequence.
 - `Pending`: the key sequence is a valid prefix and the resolver is waiting for another key.
 - `Matched`: the sequence matched a binding.
 - `Unmatched`: the sequence did not match any binding.
@@ -112,6 +136,8 @@ The resolver only reports key sequence outcomes. Your application owns the actio
 When a key is both a complete binding and a prefix for a longer binding, `straw` returns `Pending` and starts a timeout command. If no longer sequence arrives before the timeout, the pending exact match resolves.
 
 By default, pending sequences time out after `500ms` and `esc` cancels pending input. Use `WithTimeout` and `WithCancelKeys` to customize that behavior.
+
+Call `Reset` when the old pending keys should no longer matter. Common cases are switching screens, closing a palette, changing modes, or replacing the active keymap.
 
 ## Host Key Handling
 
@@ -124,6 +150,17 @@ Failed keys after a pending prefix do not pass through by default. Use `WithFail
 The current v0 implementation uses a simple lookup path that is easy to understand and test. Benchmarks show linear scaling with binding count, which is expected for the current design. This is acceptable for typical terminal applications with modest binding sets.
 
 Future versions may replace the current lookup with a trie or another prefix index so very large binding sets stay efficient.
+
+## Limitations In v0.1.0
+
+`straw` is intentionally small for the first public release. These limits are part of the current design:
+
+- Matching is exact. `ctrl+c`, `c`, `esc`, and `enter` are different key shapes.
+- Use `TextSequence("gh")` for multi-key text sequences. `Text("gh")` is not a valid single key.
+- Adapter packages ignore Bubble Tea input that cannot be represented as one supported key press, such as pasted text or key release events.
+- Timeout tokens are tied to one resolver and one pending generation. A stale timeout returns `Idle` and should be ignored.
+- The root resolver is mutable. Use it from one update flow at a time, as you normally would inside a Bubble Tea model.
+- Binding analysis, file-based binding configuration, modes, contexts, enabled or disabled bindings, and continuation inspection are deferred until after v0.1.0.
 
 ## Benchmarks
 
@@ -153,14 +190,16 @@ Current benchmarks are a local baseline, not a CI threshold or public performanc
 
 ## Roadmap
 
+`straw` is pre-release v0 software. The public API is intended to be small and stable enough for early use, but breaking changes may still happen before v1 as real Bubble Tea integrations shape the resolver model.
+
 - Stabilize the v0 API through real Bubble Tea usage.
-- Add a Bubble Tea v1 compatibility adapter.
 - Improve lookup performance for large binding sets.
-- Add public CI, release notes, and contribution workflow files before the first public release.
+- Gather feedback from early Bubble Tea integrations.
+- Improve release notes and contribution workflow as the project matures.
 
 ## Contributing
 
-Contributions are welcome after the public workflow is in place. See `CONTRIBUTING.md` for local setup, tests, benchmarks, and pull request expectations.
+Contributions are welcome. See `CONTRIBUTING.md` for local setup, tests, benchmarks, and pull request expectations.
 
 ## License
 
