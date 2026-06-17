@@ -124,9 +124,9 @@ case tea.KeyPressMsg:
 
 Failed keys after a pending prefix do not pass through by default. Use `WithFailedPendingPassThrough(true)` if your application wants those failed pending keys to be handled by the host application.
 
-## Limitations In v0.1.0
+## Current Limitations
 
-The first public release keeps the resolver small and predictable. These limits are intentional:
+The resolver is intentionally small and predictable. These limits are part of the current design:
 
 - Matching is exact. A text key, a special key, and a modified key are different shapes.
 - Use `TextSequence("gh")` for multiple printable key presses. `Text("gh")` is invalid because `Text` represents one key press.

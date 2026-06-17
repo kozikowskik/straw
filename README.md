@@ -151,9 +151,9 @@ The current v0 implementation uses a simple lookup path that is easy to understa
 
 Future versions may replace the current lookup with a trie or another prefix index so very large binding sets stay efficient.
 
-## Limitations In v0.1.0
+## Current Limitations
 
-`straw` is intentionally small for the first public release. These limits are part of the current design:
+`straw` is intentionally small. These limits are part of the current design:
 
 - Matching is exact. `ctrl+c`, `c`, `esc`, and `enter` are different key shapes.
 - Use `TextSequence("gh")` for multi-key text sequences. `Text("gh")` is not a valid single key.
@@ -161,33 +161,7 @@ Future versions may replace the current lookup with a trie or another prefix ind
 - Adapter packages ignore Bubble Tea input that cannot be represented as one supported key press, such as pasted text or key release events.
 - Timeout tokens are tied to one resolver and one pending generation. A stale timeout returns `Idle` and should be ignored.
 - The root resolver is mutable. Use it from one update flow at a time, as you normally would inside a Bubble Tea model.
-- Binding analysis, file-based binding configuration, modes, contexts, enabled or disabled bindings, and continuation inspection are deferred until after v0.1.0.
-
-## Benchmarks
-
-Run the full local benchmark suite with allocation reporting:
-
-```sh
-go test -run '^$' -bench=. -benchmem ./...
-```
-
-Run a focused benchmark group:
-
-```sh
-go test -run '^$' -bench '^BenchmarkNew$' -benchmem .
-go test -run '^$' -bench '^BenchmarkUpdateExact' -benchmem .
-go test -run '^$' -bench '^BenchmarkTimeout' -benchmem .
-```
-
-Capture a local baseline for later comparison:
-
-```sh
-go test -run '^$' -bench=. -benchmem ./... > /tmp/straw-benchmark-baseline.txt
-```
-
-Each benchmark result reports average time, bytes allocated, and allocation count per operation. For example, `1331402 ns/op`, `1280017 B/op`, and `10002 allocs/op` mean about `1.33ms`, `1.28MB`, and `10002` allocations per measured operation.
-
-Current benchmarks are a local baseline, not a CI threshold or public performance guarantee. Use them to compare future optimization work, especially changes to resolver lookup behavior.
+- Binding analysis, file-based binding configuration, modes, contexts, enabled or disabled bindings, and continuation inspection are deferred for now.
 
 ## Roadmap
 

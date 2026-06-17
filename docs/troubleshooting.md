@@ -118,7 +118,7 @@ This is expected. Adapter resolvers return `Idle` for non-key messages and for t
 
 Handle non-key Bubble Tea messages as usual after the pass-through check or before calling the resolver if they should always run.
 
-The adapters also ignore key input that does not map to one supported key press. Pasted text, multi-rune key messages, and key release messages are ignored in v0.1.0.
+The adapters also ignore key input that does not map to one supported key press. Pasted text, multi-rune key messages, and key release messages are ignored by the current adapters.
 
 ## Duplicate Sequence Errors
 
