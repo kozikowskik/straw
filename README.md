@@ -110,18 +110,12 @@ Detailed guides are available in [`docs/`](docs/): [core concepts](docs/concepts
 
 ## API Overview
 
-- `Key` describes one key press.
-- `Text`, `Code`, and `Modified` build keys for printable text, special keys, and modified keys.
-- `Seq`, `Sequence`, and `TextSequence` build ordered key sequences.
-- `Binding[A]` maps an application-owned action to a sequence.
-- `Bind` creates bindings and accepts optional metadata such as `Description`.
-- `New` validates bindings and builds a `Resolver[A]`.
+- `Bind` maps one application-owned action to one key sequence.
+- `TextSequence`, `Sequence`, `Text`, `Code`, and `Modified` build the key sequences users press.
+- `New` validates bindings and creates a resolver.
 - Adapter `Resolver.Update` methods accept Bubble Tea messages and return a `Result[A]` plus an optional `tea.Cmd`.
-- Root `Resolver.UpdateKey` and `Resolver.UpdateTimeout` expose the version-neutral resolver core for non-Bubble Tea code.
-- `Timeout[A]` tells adapter authors and root resolver users when to schedule pending-sequence timeout work.
-- `Resolver.Reset` clears any pending sequence when your screen or mode changes.
-- `Result[A]` reports whether input is idle, pending, matched, unmatched, or canceled.
-- `ShouldPassThrough` reports whether normal host key handling should run for a result.
+- `Result[A]` reports matched, pending, unmatched, canceled, and idle input.
+- `ShouldPassThrough` tells the host application when normal key handling should run.
 
 ## Resolver Behavior
 
@@ -147,7 +141,7 @@ Failed keys after a pending prefix do not pass through by default. Use `WithFail
 
 ## Performance
 
-The current v0 implementation uses a simple lookup path that is easy to understand and test. Benchmarks show linear scaling with binding count, which is expected for the current design. This is acceptable for typical terminal applications with modest binding sets.
+The current implementation uses a simple lookup path that is easy to understand and test. It is intended for typical terminal applications with modest binding sets.
 
 Future versions may replace the current lookup with a trie or another prefix index so very large binding sets stay efficient.
 
@@ -168,9 +162,9 @@ Future versions may replace the current lookup with a trie or another prefix ind
 `straw` is pre-release v0 software. The public API is intended to be small and stable enough for early use, but breaking changes may still happen before v1 as real Bubble Tea integrations shape the resolver model.
 
 - Stabilize the v0 API through real Bubble Tea usage.
-- Improve lookup performance for large binding sets.
-- Gather feedback from early Bubble Tea integrations.
-- Improve release notes and contribution workflow as the project matures.
+- Consider binding analysis and reporting for larger keymaps.
+- Consider continuation inspection so applications can show possible next keys for pending prefixes.
+- Improve lookup performance if real applications need larger binding sets.
 
 ## Contributing
 

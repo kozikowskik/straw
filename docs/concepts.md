@@ -124,6 +124,12 @@ case tea.KeyPressMsg:
 
 Failed keys after a pending prefix do not pass through by default. Use `WithFailedPendingPassThrough(true)` if your application wants those failed pending keys to be handled by the host application.
 
+## Multiple Resolvers
+
+Separate screens or child models can each own their own resolver. The root model can route messages to the active child instead of making one resolver handle every screen in the application.
+
+This pattern keeps pending sequence state local to the screen that owns it. If you reuse one resolver while changing screens, call `Reset` when old pending input should not affect the next screen.
+
 ## Current Limitations
 
 The resolver is intentionally small and predictable. These limits are part of the current design:

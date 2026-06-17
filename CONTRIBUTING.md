@@ -35,6 +35,14 @@ Run benchmarks locally when changing resolver lookup, allocation behavior, or ti
 go test -run '^$' -bench=. -benchmem ./...
 ```
 
+Focused benchmark groups can be useful while working on resolver lookup behavior:
+
+```sh
+go test -run '^$' -bench '^BenchmarkNew$' -benchmem .
+go test -run '^$' -bench '^BenchmarkUpdateExact' -benchmem .
+go test -run '^$' -bench '^BenchmarkTimeout' -benchmem .
+```
+
 For before/after comparisons, capture repeated runs and compare them with `benchstat`:
 
 ```sh

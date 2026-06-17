@@ -2,6 +2,8 @@
 
 A binding maps one application-owned action to one key sequence. `straw` does not define your actions or execute them. Your application owns both the action type and the behavior attached to each matched action.
 
+Most application code should handle actions, not raw key strings. The key sequence is how the user triggers behavior; the action is what the application responds to.
+
 ## Action Types
 
 Use any comparable type for actions. Small custom types usually make application code easier to read than raw strings.
@@ -20,6 +22,8 @@ Strings are also valid for small examples or simple applications.
 ```go
 straw.Bind("go-home", straw.TextSequence("gh"))
 ```
+
+When you need metadata or debugging information, inspect the matched binding with `Result.Binding()` and the associated sequence with `Binding.Sequence()` or `Result.Sequence()`.
 
 ## Text Keys
 
