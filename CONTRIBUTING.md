@@ -25,7 +25,6 @@ go test ./...
 - Run `gofmt` on changed Go files.
 - Add or update tests for behavior changes.
 - Add runnable examples for public API additions.
-- Do not commit private notes, local experiments, editor settings, or generated files that are not part of the project.
 
 ## Benchmarks
 
