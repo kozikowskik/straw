@@ -104,6 +104,11 @@ func (r *Resolver[A]) PendingSequence() Seq {
 	return cloneSeq(r.pendingSeq)
 }
 
+// NextChoices returns the immediate keys available from the current pending sequence.
+func (r *Resolver[A]) NextChoices() []NextChoice[A] {
+	return r.index.nextChoices(r.pendingSeq)
+}
+
 // Scheduled reports whether this timeout token should be scheduled by an adapter.
 func (t Timeout[A]) Scheduled() bool {
 	return t.resolverID != 0

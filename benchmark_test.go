@@ -21,6 +21,7 @@ var benchmarkResultSink Result[benchmarkAction]
 var benchmarkResolverSink *Resolver[benchmarkAction]
 var benchmarkErrorSink error
 var benchmarkTimeoutSink Timeout[benchmarkAction]
+var benchmarkNextChoicesSink []NextChoice[benchmarkAction]
 
 // benchmarkKeyPress builds a root text key.
 func benchmarkKeyPress(text string) Key {
@@ -338,6 +339,33 @@ func BenchmarkUpdateLongSharedPrefix(b *testing.B) {
 			benchmarkTimeoutSink = timeout
 			if !result.IsPending() || !resolver.Pending() || !timeout.Scheduled() {
 				b.Fatalf("Update() pending/resolverPending/cmd = %v/%v/%v, want true/true/true", result.IsPending(), resolver.Pending(), timeout.Scheduled())
+			}
+		})
+	}
+}
+
+// BenchmarkNextChoices measures immediate-choice queries over the binding index.
+func BenchmarkNextChoices(b *testing.B) {
+	for _, count := range benchmarkBindingCounts {
+		bindings := []Binding[benchmarkAction]{
+			Bind(benchmarkPrefixAction, TextSequence("gi")),
+			Bind(benchmarkLongAction, TextSequence("gii")),
+		}
+		bindings = append(bindings, benchmarkGeneratedBindings(count-2, 0)...)
+		resolver := benchmarkNewResolver(b, bindings)
+		benchmarkPreparePendingPrefix(resolver, TextSequence("g"))
+
+		b.Run(benchmarkCountName(count), func(b *testing.B) {
+			b.ReportAllocs()
+			b.ResetTimer()
+			var choices []NextChoice[benchmarkAction]
+			for range b.N {
+				choices = resolver.NextChoices()
+			}
+			b.StopTimer()
+			benchmarkNextChoicesSink = choices
+			if len(choices) != 1 || !choices[0].HasBinding || !choices[0].HasChildren {
+				b.Fatalf("NextChoices() = %#v, want one binding+children choice", choices)
 			}
 		})
 	}

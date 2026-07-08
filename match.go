@@ -18,6 +18,15 @@ type matchStatus[A comparable] struct {
 	hasPrefix bool
 }
 
+// NextChoice describes one immediate key that can follow the resolver's current prefix.
+type NextChoice[A comparable] struct {
+	Key         Key
+	Sequence    Seq
+	Binding     Binding[A]
+	HasBinding  bool
+	HasChildren bool
+}
+
 // newBindingIndex validates bindings and stores safe copies for resolver use.
 func newBindingIndex[A comparable](bindings []Binding[A]) (*bindingIndex[A], error) {
 	var errs []error
@@ -86,6 +95,41 @@ func (i *bindingIndex[A]) lookupWithKey(prefix Seq, key Key) matchStatus[A] {
 		}
 	}
 	return status
+}
+
+// nextChoices returns immediate next keys for prefix in deterministic binding order.
+func (i *bindingIndex[A]) nextChoices(prefix Seq) []NextChoice[A] {
+	choices := make([]NextChoice[A], 0)
+	positions := map[Key]int{}
+
+	for _, binding := range i.bindings {
+		bindingSequence := binding.sequence
+		if len(bindingSequence) <= len(prefix) || !seqHasPrefix(bindingSequence, prefix) {
+			continue
+		}
+
+		key := bindingSequence[len(prefix)]
+		position, exists := positions[key]
+		if !exists {
+			position = len(choices)
+			positions[key] = position
+			choices = append(choices, NextChoice[A]{
+				Key:      key,
+				Sequence: appendKey(prefix, key),
+			})
+		}
+
+		choice := &choices[position]
+		if len(bindingSequence) == len(prefix)+1 {
+			choice.Binding = binding
+			choice.HasBinding = true
+		}
+		if len(bindingSequence) > len(prefix)+1 {
+			choice.HasChildren = true
+		}
+	}
+
+	return choices
 }
 
 // validateKey enforces the public key-builder contract at resolver construction time.

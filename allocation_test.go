@@ -6,6 +6,7 @@ var allocationResultSink Result[testAction]
 var allocationResolverSink *Resolver[testAction]
 var allocationErrorSink error
 var allocationTimeoutSink Timeout[testAction]
+var allocationNextChoicesSink []NextChoice[testAction]
 
 func TestUpdateKeyAvoidsDuplicateSequenceAllocations(t *testing.T) {
 	if raceEnabled {
@@ -119,5 +120,33 @@ func TestNewAvoidsDuplicateBindingSequenceCopies(t *testing.T) {
 
 	if allocs > 12 {
 		t.Fatalf("New() allocations = %.0f, want <= 12", allocs)
+	}
+}
+
+func TestNextChoicesAllocationProfile(t *testing.T) {
+	if raceEnabled {
+		t.Skip("allocation counts are not stable under the race detector")
+	}
+
+	bindings := []Binding[testAction]{
+		Bind(testGoHome, TextSequence("gh")),
+		Bind(testCopyLine, TextSequence("gd")),
+		Bind(testDeleteLine, TextSequence("yy")),
+	}
+	resolver, err := New(bindings)
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+
+	allocs := testing.AllocsPerRun(100, func() {
+		choices := resolver.NextChoices()
+		allocationNextChoicesSink = choices
+		if len(choices) != 2 {
+			t.Fatalf("NextChoices() length = %d, want 2", len(choices))
+		}
+	})
+
+	if allocs > 5 {
+		t.Fatalf("NextChoices() allocations = %.0f, want <= 5", allocs)
 	}
 }
