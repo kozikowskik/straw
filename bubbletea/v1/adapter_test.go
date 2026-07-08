@@ -32,6 +32,42 @@ func TestUpdateMatchesTextSequence(t *testing.T) {
 	}
 }
 
+func TestResolverQueryAPIsForwardToCore(t *testing.T) {
+	resolver, err := New([]Binding[testAction]{
+		Bind(testGoHome, TextSequence("gh"), Description("go home")),
+		Bind(testCopyLine, TextSequence("gd"), Description("go dashboard")),
+	})
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+
+	resolver.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'g'}})
+	assertSeqEqual(t, resolver.PendingSequence(), TextSequence("g"))
+
+	choices := resolver.NextChoices()
+	if len(choices) != 2 {
+		t.Fatalf("NextChoices() length = %d, want 2", len(choices))
+	}
+	if choices[0].Key != Text("h") || !choices[0].HasBinding || choices[0].Binding.Description() != "go home" {
+		t.Fatalf("first choice = %#v, want h binding go home", choices[0])
+	}
+	if choices[1].Key != Text("d") || !choices[1].HasBinding || choices[1].Binding.Description() != "go dashboard" {
+		t.Fatalf("second choice = %#v, want d binding go dashboard", choices[1])
+	}
+}
+
+func assertSeqEqual(t *testing.T, got Seq, want Seq) {
+	t.Helper()
+	if len(got) != len(want) {
+		t.Fatalf("sequence length = %d, want %d", len(got), len(want))
+	}
+	for i := range got {
+		if got[i] != want[i] {
+			t.Fatalf("sequence[%d] = %#v, want %#v", i, got[i], want[i])
+		}
+	}
+}
+
 func TestUpdateMatchesSpecialCtrlAndAltKeys(t *testing.T) {
 	tests := []struct {
 		name    string
