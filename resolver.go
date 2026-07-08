@@ -99,6 +99,11 @@ func (r *Resolver[A]) Pending() bool {
 	return len(r.pendingSeq) > 0
 }
 
+// PendingSequence returns a safe copy of the active pending sequence.
+func (r *Resolver[A]) PendingSequence() Seq {
+	return cloneSeq(r.pendingSeq)
+}
+
 // Scheduled reports whether this timeout token should be scheduled by an adapter.
 func (t Timeout[A]) Scheduled() bool {
 	return t.resolverID != 0

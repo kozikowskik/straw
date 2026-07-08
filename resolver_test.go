@@ -271,6 +271,73 @@ func TestResolverMatchesSimpleSequence(t *testing.T) {
 	assertSeqEqual(t, result.Sequence(), TextSequence("gh"))
 }
 
+func TestPendingSequenceReportsCopyOfActiveSequence(t *testing.T) {
+	resolver, err := New([]Binding[testAction]{Bind(testGoHome, TextSequence("gh"))})
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+
+	if got := resolver.PendingSequence(); len(got) != 0 {
+		t.Fatalf("idle PendingSequence() length = %d, want 0", len(got))
+	}
+
+	resolver.UpdateKey(keyPress("g"))
+	got := resolver.PendingSequence()
+	assertSeqEqual(t, got, TextSequence("g"))
+
+	got[0] = Text("x")
+	assertSeqEqual(t, resolver.PendingSequence(), TextSequence("g"))
+}
+
+func TestPendingSequenceClearsWithResolverState(t *testing.T) {
+	tests := []struct {
+		name string
+		run  func(*Resolver[testAction], Timeout[testAction])
+	}{
+		{
+			name: "reset",
+			run: func(resolver *Resolver[testAction], _ Timeout[testAction]) {
+				resolver.Reset()
+			},
+		},
+		{
+			name: "timeout resolves pending exact match",
+			run: func(resolver *Resolver[testAction], timeout Timeout[testAction]) {
+				resolver.UpdateTimeout(timeout)
+			},
+		},
+		{
+			name: "cancel key clears pending prefix",
+			run: func(resolver *Resolver[testAction], _ Timeout[testAction]) {
+				resolver.UpdateKey(Code(KeyEsc))
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			resolver, err := New([]Binding[testAction]{
+				Bind(testGoHome, TextSequence("g")),
+				Bind(testCopyLine, TextSequence("gh")),
+			})
+			if err != nil {
+				t.Fatalf("New() error = %v", err)
+			}
+
+			_, timeout := resolver.UpdateKey(keyPress("g"))
+			assertSeqEqual(t, resolver.PendingSequence(), TextSequence("g"))
+
+			tt.run(resolver, timeout)
+			if resolver.Pending() {
+				t.Fatal("Pending() = true, want false")
+			}
+			if got := resolver.PendingSequence(); len(got) != 0 {
+				t.Fatalf("PendingSequence() length = %d, want 0", len(got))
+			}
+		})
+	}
+}
+
 // TestResolverRejectsForgedTimeout verifies arbitrary timeout tokens do not affect state.
 func TestResolverRejectsForgedTimeout(t *testing.T) {
 	resolver, err := New([]Binding[testAction]{Bind(testGoHome, TextSequence("g"))})
