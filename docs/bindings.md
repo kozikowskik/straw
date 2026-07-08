@@ -63,6 +63,27 @@ straw.Sequence(straw.Modified('x', straw.ModAlt))
 
 Modifier constants include values such as `ModCtrl` and `ModAlt`.
 
+## Key Labels
+
+Use `Key.Label()` for key help. Labels come from `straw`'s version-neutral key model, not Bubble Tea message names.
+
+```go
+straw.Text("g").Label()                              // "g"
+straw.Code(straw.KeyEsc).Label()                     // "esc"
+straw.Modified('c', straw.ModCtrl).Label()           // "ctrl+c"
+straw.Modified(straw.KeyEnter, straw.ModAlt).Label() // "alt+enter"
+```
+
+For which-key panels, combine `Resolver.NextChoices()` with `Binding.Description()`:
+
+```go
+for _, choice := range resolver.NextChoices() {
+	if choice.HasBinding {
+		fmt.Println(choice.Key.Label(), choice.Binding.Description())
+	}
+}
+```
+
 ## Sequences And Modified Keys
 
 Use `Sequence` when you need to combine text, special, and modified keys in one binding.

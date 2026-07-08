@@ -67,6 +67,30 @@ For example, with bindings for `g` and `gh`:
 2. Pressing `h` before the timeout returns `Matched` for `gh`.
 3. Letting the timeout expire returns `Matched` for `g`.
 
+## Pending Sequence Inspection
+
+Use `PendingSequence()` to display the active prefix.
+
+```go
+resolver.UpdateKey(straw.Text("g"))
+pending := resolver.PendingSequence()
+```
+
+The returned sequence is a copy. Mutating it does not change resolver state. `PendingSequence()` returns an empty sequence when the resolver is idle, reset, canceled, or resolved by timeout.
+
+Use `NextChoices()` to list the immediate keys that can follow the current prefix.
+
+```go
+for _, choice := range resolver.NextChoices() {
+	label := choice.Key.Label()
+	if choice.HasBinding {
+		fmt.Println(label, choice.Binding.Description())
+	}
+}
+```
+
+When the resolver is idle, `NextChoices()` returns root-level choices. When a prefix is pending, it returns choices under that prefix. Each row is one immediate next key, not every descendant binding. A choice can complete a binding, continue to longer bindings, or both.
+
 ## Timeout Behavior
 
 Pending sequences use a timeout so a short binding can coexist with a longer binding that shares its prefix.
