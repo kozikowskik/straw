@@ -67,6 +67,30 @@ For example, with bindings for `g` and `gh`:
 2. Pressing `h` before the timeout returns `Matched` for `gh`.
 3. Letting the timeout expire returns `Matched` for `g`.
 
+## Pending Sequence Inspection
+
+Use `PendingSequence()` to display the active prefix.
+
+```go
+resolver.UpdateKey(straw.Text("g"))
+pending := resolver.PendingSequence()
+```
+
+The returned sequence is a copy. Mutating it does not change resolver state. `PendingSequence()` returns an empty sequence when the resolver is idle, reset, canceled, or resolved by timeout.
+
+Use `NextChoices()` to list the immediate keys that can follow the current prefix.
+
+```go
+for _, choice := range resolver.NextChoices() {
+	label := choice.Key.Label()
+	if choice.HasBinding {
+		fmt.Println(label, choice.Binding.Description())
+	}
+}
+```
+
+When the resolver is idle, `NextChoices()` returns root-level choices. When a prefix is pending, it returns choices under that prefix. Each row is one immediate next key, not every descendant binding. A choice can complete a binding, continue to longer bindings, or both.
+
 ## Timeout Behavior
 
 Pending sequences use a timeout so a short binding can coexist with a longer binding that shares its prefix.
@@ -124,9 +148,15 @@ case tea.KeyPressMsg:
 
 Failed keys after a pending prefix do not pass through by default. Use `WithFailedPendingPassThrough(true)` if your application wants those failed pending keys to be handled by the host application.
 
-## Limitations In v0.1.0
+## Multiple Resolvers
 
-The first public release keeps the resolver small and predictable. These limits are intentional:
+Separate screens or child models can each own their own resolver. The root model can route messages to the active child instead of making one resolver handle every screen in the application.
+
+This pattern keeps pending sequence state local to the screen that owns it. If you reuse one resolver while changing screens, call `Reset` when old pending input should not affect the next screen.
+
+## Current Limitations
+
+The resolver is intentionally small and predictable. These limits are part of the current design:
 
 - Matching is exact. A text key, a special key, and a modified key are different shapes.
 - Use `TextSequence("gh")` for multiple printable key presses. `Text("gh")` is invalid because `Text` represents one key press.

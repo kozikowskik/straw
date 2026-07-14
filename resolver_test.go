@@ -271,6 +271,155 @@ func TestResolverMatchesSimpleSequence(t *testing.T) {
 	assertSeqEqual(t, result.Sequence(), TextSequence("gh"))
 }
 
+func TestPendingSequenceReportsCopyOfActiveSequence(t *testing.T) {
+	resolver, err := New([]Binding[testAction]{Bind(testGoHome, TextSequence("gh"))})
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+
+	if got := resolver.PendingSequence(); len(got) != 0 {
+		t.Fatalf("idle PendingSequence() length = %d, want 0", len(got))
+	}
+
+	resolver.UpdateKey(keyPress("g"))
+	got := resolver.PendingSequence()
+	assertSeqEqual(t, got, TextSequence("g"))
+
+	got[0] = Text("x")
+	assertSeqEqual(t, resolver.PendingSequence(), TextSequence("g"))
+}
+
+func TestPendingSequenceClearsWithResolverState(t *testing.T) {
+	tests := []struct {
+		name string
+		run  func(*Resolver[testAction], Timeout[testAction])
+	}{
+		{
+			name: "reset",
+			run: func(resolver *Resolver[testAction], _ Timeout[testAction]) {
+				resolver.Reset()
+			},
+		},
+		{
+			name: "timeout resolves pending exact match",
+			run: func(resolver *Resolver[testAction], timeout Timeout[testAction]) {
+				resolver.UpdateTimeout(timeout)
+			},
+		},
+		{
+			name: "cancel key clears pending prefix",
+			run: func(resolver *Resolver[testAction], _ Timeout[testAction]) {
+				resolver.UpdateKey(Code(KeyEsc))
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			resolver, err := New([]Binding[testAction]{
+				Bind(testGoHome, TextSequence("g")),
+				Bind(testCopyLine, TextSequence("gh")),
+			})
+			if err != nil {
+				t.Fatalf("New() error = %v", err)
+			}
+
+			_, timeout := resolver.UpdateKey(keyPress("g"))
+			assertSeqEqual(t, resolver.PendingSequence(), TextSequence("g"))
+
+			tt.run(resolver, timeout)
+			if resolver.Pending() {
+				t.Fatal("Pending() = true, want false")
+			}
+			if got := resolver.PendingSequence(); len(got) != 0 {
+				t.Fatalf("PendingSequence() length = %d, want 0", len(got))
+			}
+		})
+	}
+}
+
+func TestNextChoicesReturnsRootAndPendingChoices(t *testing.T) {
+	resolver, err := New([]Binding[testAction]{
+		Bind(testGoHome, TextSequence("gh"), Description("go home")),
+		Bind(testCopyLine, TextSequence("yy"), Description("copy line")),
+		Bind(testDeleteLine, TextSequence("gd"), Description("delete line")),
+	})
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+
+	root := resolver.NextChoices()
+	if len(root) != 2 {
+		t.Fatalf("root choices length = %d, want 2", len(root))
+	}
+	assertNextChoice(t, root[0], Text("g"), TextSequence("g"), false, true, 0, "")
+	assertNextChoice(t, root[1], Text("y"), TextSequence("y"), false, true, 0, "")
+
+	resolver.UpdateKey(keyPress("g"))
+	pending := resolver.NextChoices()
+	if len(pending) != 2 {
+		t.Fatalf("pending choices length = %d, want 2", len(pending))
+	}
+	assertNextChoice(t, pending[0], Text("h"), TextSequence("gh"), true, false, testGoHome, "go home")
+	assertNextChoice(t, pending[1], Text("d"), TextSequence("gd"), true, false, testDeleteLine, "delete line")
+}
+
+func TestNextChoicesCombinesBindingAndChildrenForSameImmediateKey(t *testing.T) {
+	resolver, err := New([]Binding[testAction]{
+		Bind(testGoHome, TextSequence("gi"), Description("go item")),
+		Bind(testCopyLine, TextSequence("gii"), Description("inspect item")),
+		Bind(testDeleteLine, TextSequence("ga"), Description("go archive")),
+	})
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+
+	resolver.UpdateKey(keyPress("g"))
+	choices := resolver.NextChoices()
+	if len(choices) != 2 {
+		t.Fatalf("choices length = %d, want 2", len(choices))
+	}
+	assertNextChoice(t, choices[0], Text("i"), TextSequence("gi"), true, true, testGoHome, "go item")
+	assertNextChoice(t, choices[1], Text("a"), TextSequence("ga"), true, false, testDeleteLine, "go archive")
+
+	choices[0].Sequence[0] = Text("x")
+	fresh := resolver.NextChoices()
+	assertSeqEqual(t, fresh[0].Sequence, TextSequence("gi"))
+}
+
+func TestNextChoicesReturnsEmptyWhenNoChoicesExist(t *testing.T) {
+	resolver, err := New[testAction](nil)
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+	if got := resolver.NextChoices(); len(got) != 0 {
+		t.Fatalf("NextChoices() length = %d, want 0", len(got))
+	}
+}
+
+func assertNextChoice(t *testing.T, got NextChoice[testAction], wantKey Key, wantSeq Seq, wantBinding bool, wantChildren bool, wantAction testAction, wantDescription string) {
+	t.Helper()
+
+	if got.Key != wantKey {
+		t.Fatalf("choice key = %#v, want %#v", got.Key, wantKey)
+	}
+	assertSeqEqual(t, got.Sequence, wantSeq)
+	if got.HasBinding != wantBinding {
+		t.Fatalf("choice HasBinding = %v, want %v", got.HasBinding, wantBinding)
+	}
+	if got.HasChildren != wantChildren {
+		t.Fatalf("choice HasChildren = %v, want %v", got.HasChildren, wantChildren)
+	}
+	if got.HasBinding {
+		if got.Binding.Action() != wantAction {
+			t.Fatalf("choice action = %v, want %v", got.Binding.Action(), wantAction)
+		}
+		if got.Binding.Description() != wantDescription {
+			t.Fatalf("choice description = %q, want %q", got.Binding.Description(), wantDescription)
+		}
+	}
+}
+
 // TestResolverRejectsForgedTimeout verifies arbitrary timeout tokens do not affect state.
 func TestResolverRejectsForgedTimeout(t *testing.T) {
 	resolver, err := New([]Binding[testAction]{Bind(testGoHome, TextSequence("g"))})

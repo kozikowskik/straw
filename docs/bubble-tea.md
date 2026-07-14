@@ -135,6 +135,27 @@ resolver, err := straw.New(bindings,
 
 See [examples/timeout-cancel](../examples/timeout-cancel) for a runnable example.
 
+## Nested Models
+
+Resolvers do not need to live in the root Bubble Tea model. A child model can own its resolver and handle its local actions inside its own `Update` method.
+
+The root model can route each message to the active child:
+
+```go
+switch m.screen {
+case homeScreen:
+	home, cmd := m.home.Update(msg)
+	m.home = home
+	return m, cmd
+case dashboardScreen:
+	dashboard, cmd := m.dashboard.Update(msg)
+	m.dashboard = dashboard
+	return m, cmd
+}
+```
+
+Prefer routing to one active resolver over broadcasting the same key message to several resolvers. Each resolver has independent pending sequence state, so broadcasting can make inactive screens continue sequences unexpectedly.
+
 ## Root Core Versus Adapters
 
 Use the root package for:

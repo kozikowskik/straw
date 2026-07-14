@@ -112,13 +112,21 @@ resolver.Reset()
 
 This clears only pending sequence state. It does not remove bindings.
 
+For applications with separate Bubble Tea child models, another option is to give each active screen its own resolver and route messages only to that screen.
+
+## Two Resolvers React To The Same Keys
+
+Avoid broadcasting the same key message to several resolvers unless you intentionally want each resolver to keep independent pending state.
+
+For most multi-screen applications, route the message to the active child model and let that child use its own resolver. If you switch screens while a resolver is pending, call `Reset` on the resolver that should stop tracking the old sequence.
+
 ## Non-Key Messages Appear To Do Nothing
 
 This is expected. Adapter resolvers return `Idle` for non-key messages and for timeout messages that do not belong to the current pending sequence.
 
 Handle non-key Bubble Tea messages as usual after the pass-through check or before calling the resolver if they should always run.
 
-The adapters also ignore key input that does not map to one supported key press. Pasted text, multi-rune key messages, and key release messages are ignored in v0.1.0.
+The adapters also ignore key input that does not map to one supported key press. Pasted text, multi-rune key messages, and key release messages are ignored by the current adapters.
 
 ## Duplicate Sequence Errors
 

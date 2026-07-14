@@ -1,5 +1,7 @@
 package straw
 
+import "strings"
+
 type keyKind int
 
 const (
@@ -50,6 +52,36 @@ const (
 	KeyF12
 )
 
+var codeLabels = map[rune]string{
+	KeyBackspace: "backspace",
+	KeyTab:       "tab",
+	KeyEnter:     "enter",
+	KeyEsc:       "esc",
+	KeySpace:     "space",
+	KeyUp:        "up",
+	KeyDown:      "down",
+	KeyRight:     "right",
+	KeyLeft:      "left",
+	KeyHome:      "home",
+	KeyEnd:       "end",
+	KeyPgUp:      "pgup",
+	KeyPgDown:    "pgdown",
+	KeyDelete:    "delete",
+	KeyInsert:    "insert",
+	KeyF1:        "f1",
+	KeyF2:        "f2",
+	KeyF3:        "f3",
+	KeyF4:        "f4",
+	KeyF5:        "f5",
+	KeyF6:        "f6",
+	KeyF7:        "f7",
+	KeyF8:        "f8",
+	KeyF9:        "f9",
+	KeyF10:       "f10",
+	KeyF11:       "f11",
+	KeyF12:       "f12",
+}
+
 // Key describes one version-neutral key press in a binding sequence.
 type Key struct {
 	kind keyKind
@@ -83,6 +115,55 @@ func Code(code rune) Key {
 // Modified builds a key with modifiers such as ctrl or alt.
 func Modified(code rune, mod Mod) Key {
 	return Key{kind: keyKindModified, code: code, mod: mod}
+}
+
+// Label returns stable display text for this key.
+func (k Key) Label() string {
+	switch k.kind {
+	case keyKindText:
+		return k.text
+	case keyKindCode:
+		return codeLabel(k.code)
+	case keyKindModified:
+		parts := modifierLabels(k.mod)
+		base := codeLabel(k.code)
+		if base == "" && k.code != 0 {
+			base = string(k.code)
+		}
+		if base != "" {
+			parts = append(parts, base)
+		}
+		return strings.Join(parts, "+")
+	default:
+		return ""
+	}
+}
+
+func codeLabel(code rune) string {
+	return codeLabels[code]
+}
+
+func modifierLabels(mod Mod) []string {
+	labels := make([]string, 0, 6)
+	if mod&ModCtrl != 0 {
+		labels = append(labels, "ctrl")
+	}
+	if mod&ModAlt != 0 {
+		labels = append(labels, "alt")
+	}
+	if mod&ModShift != 0 {
+		labels = append(labels, "shift")
+	}
+	if mod&ModMeta != 0 {
+		labels = append(labels, "meta")
+	}
+	if mod&ModHyper != 0 {
+		labels = append(labels, "hyper")
+	}
+	if mod&ModSuper != 0 {
+		labels = append(labels, "super")
+	}
+	return labels
 }
 
 // Sequence builds a sequence from explicit keys.

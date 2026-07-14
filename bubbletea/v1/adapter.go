@@ -13,6 +13,7 @@ type Binding[A comparable] = straw.Binding[A]
 type BindingOption = straw.BindingOption
 type Option = straw.Option
 type Result[A comparable] = straw.Result[A]
+type NextChoice[A comparable] = straw.NextChoice[A]
 type State = straw.State
 type Mod = straw.Mod
 
@@ -114,6 +115,12 @@ func (r *Resolver[A]) Reset() { r.core.Reset() }
 
 // Pending reports whether the resolver is waiting for more keys.
 func (r *Resolver[A]) Pending() bool { return r.core.Pending() }
+
+// PendingSequence returns a safe copy of the active pending sequence.
+func (r *Resolver[A]) PendingSequence() Seq { return r.core.PendingSequence() }
+
+// NextChoices returns the immediate keys available from the current pending sequence.
+func (r *Resolver[A]) NextChoices() []NextChoice[A] { return r.core.NextChoices() }
 
 type timeoutMsg[A comparable] struct {
 	token straw.Timeout[A]

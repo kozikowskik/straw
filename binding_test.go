@@ -102,6 +102,47 @@ func TestCodeAndModifiedKeysCanBeStoredInSequence(t *testing.T) {
 	}
 }
 
+func TestKeyLabelReturnsStableDisplayText(t *testing.T) {
+	tests := []struct {
+		name string
+		key  Key
+		want string
+	}{
+		{name: "text", key: Text("g"), want: "g"},
+		{name: "unicode text", key: Text("é"), want: "é"},
+		{name: "backspace", key: Code(KeyBackspace), want: "backspace"},
+		{name: "tab", key: Code(KeyTab), want: "tab"},
+		{name: "enter", key: Code(KeyEnter), want: "enter"},
+		{name: "esc", key: Code(KeyEsc), want: "esc"},
+		{name: "space", key: Code(KeySpace), want: "space"},
+		{name: "up", key: Code(KeyUp), want: "up"},
+		{name: "down", key: Code(KeyDown), want: "down"},
+		{name: "right", key: Code(KeyRight), want: "right"},
+		{name: "left", key: Code(KeyLeft), want: "left"},
+		{name: "home", key: Code(KeyHome), want: "home"},
+		{name: "end", key: Code(KeyEnd), want: "end"},
+		{name: "page up", key: Code(KeyPgUp), want: "pgup"},
+		{name: "page down", key: Code(KeyPgDown), want: "pgdown"},
+		{name: "delete", key: Code(KeyDelete), want: "delete"},
+		{name: "insert", key: Code(KeyInsert), want: "insert"},
+		{name: "f1", key: Code(KeyF1), want: "f1"},
+		{name: "f12", key: Code(KeyF12), want: "f12"},
+		{name: "ctrl text", key: Modified('c', ModCtrl), want: "ctrl+c"},
+		{name: "alt text", key: Modified('x', ModAlt), want: "alt+x"},
+		{name: "alt enter", key: Modified(KeyEnter, ModAlt), want: "alt+enter"},
+		{name: "combined modifiers", key: Modified('c', ModCtrl|ModAlt), want: "ctrl+alt+c"},
+		{name: "zero key", key: Key{}, want: ""},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := tt.key.Label(); got != tt.want {
+				t.Fatalf("Label() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
 // assertSeqEqual compares sequences while producing focused test failures.
 func assertSeqEqual(t *testing.T, got Seq, want Seq) {
 	t.Helper()

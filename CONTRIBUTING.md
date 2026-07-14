@@ -25,7 +25,6 @@ go test ./...
 - Run `gofmt` on changed Go files.
 - Add or update tests for behavior changes.
 - Add runnable examples for public API additions.
-- Do not commit private notes, local experiments, editor settings, or generated files that are not part of the project.
 
 ## Benchmarks
 
@@ -33,6 +32,14 @@ Run benchmarks locally when changing resolver lookup, allocation behavior, or ti
 
 ```sh
 go test -run '^$' -bench=. -benchmem ./...
+```
+
+Focused benchmark groups can be useful while working on resolver lookup behavior:
+
+```sh
+go test -run '^$' -bench '^BenchmarkNew$' -benchmem .
+go test -run '^$' -bench '^BenchmarkUpdateExact' -benchmem .
+go test -run '^$' -bench '^BenchmarkTimeout' -benchmem .
 ```
 
 For before/after comparisons, capture repeated runs and compare them with `benchstat`:
