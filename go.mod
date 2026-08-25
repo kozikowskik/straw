@@ -3,7 +3,7 @@ module github.com/kozikowskik/straw
 go 1.25.0
 
 require (
-	charm.land/bubbletea/v2 v2.0.8
+	charm.land/bubbletea/v2 v2.0.9
 	github.com/charmbracelet/bubbletea v1.3.10
 )
 
