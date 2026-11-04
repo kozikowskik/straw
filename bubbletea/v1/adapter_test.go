@@ -1,6 +1,7 @@
 package v1
 
 import (
+	"reflect"
 	"testing"
 	"time"
 
@@ -53,6 +54,68 @@ func TestResolverQueryAPIsForwardToCore(t *testing.T) {
 	}
 	if choices[1].Key != Text("d") || !choices[1].HasBinding || choices[1].Binding.Description() != "go dashboard" {
 		t.Fatalf("second choice = %#v, want d binding go dashboard", choices[1])
+	}
+}
+
+func TestPendingStatusForwardsToCore(t *testing.T) {
+	resolver, err := New([]Binding[testAction]{
+		Bind(testGoHome, TextSequence("g"), Description("go home")),
+		Bind(testCopyLine, TextSequence("gh"), Description("go help")),
+	})
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+	if got := resolver.PendingStatus(); !reflect.DeepEqual(got, PendingStatus[testAction]{}) {
+		t.Fatalf("idle status = %#v", got)
+	}
+	resolver.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'g'}})
+	status := resolver.PendingStatus()
+	if !status.Pending || !status.HasBinding || status.Binding.Action() != testGoHome || status.Binding.Description() != "go home" {
+		t.Fatalf("pending status = %#v", status)
+	}
+	assertSeqEqual(t, status.Sequence, TextSequence("g"))
+	assertSeqEqual(t, status.Binding.Sequence(), TextSequence("g"))
+	if len(status.NextChoices) != 1 {
+		t.Fatalf("choices = %d, want 1", len(status.NextChoices))
+	}
+	choice := status.NextChoices[0]
+	if choice.Key != Text("h") || !choice.HasBinding || choice.HasChildren || choice.Binding.Action() != testCopyLine || choice.Binding.Description() != "go help" {
+		t.Fatalf("choice = %#v", choice)
+	}
+	assertSeqEqual(t, choice.Sequence, TextSequence("gh"))
+	result, _ := resolver.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'h'}})
+	if !result.Match(testCopyLine) {
+		t.Fatal("want gh match")
+	}
+	if got := resolver.PendingStatus(); !reflect.DeepEqual(got, PendingStatus[testAction]{}) {
+		t.Fatalf("completed status = %#v", got)
+	}
+}
+
+func TestPendingStatusForwardsPrefixOnly(t *testing.T) {
+	resolver, err := New([]Binding[testAction]{
+		Bind(testCopyLine, TextSequence("gh"), Description("go help")),
+	})
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+	resolver.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'g'}})
+	status := resolver.PendingStatus()
+	if !status.Pending || status.HasBinding || !reflect.DeepEqual(status.Binding, Binding[testAction]{}) {
+		t.Fatalf("prefix-only status = %#v", status)
+	}
+	assertSeqEqual(t, status.Sequence, TextSequence("g"))
+	if len(status.NextChoices) != 1 {
+		t.Fatalf("choices = %d, want 1", len(status.NextChoices))
+	}
+	choice := status.NextChoices[0]
+	if choice.Key != Text("h") || !choice.HasBinding || choice.HasChildren || choice.Binding.Action() != testCopyLine || choice.Binding.Description() != "go help" {
+		t.Fatalf("choice = %#v", choice)
+	}
+	assertSeqEqual(t, choice.Sequence, TextSequence("gh"))
+	resolver.Reset()
+	if got := resolver.PendingStatus(); !reflect.DeepEqual(got, PendingStatus[testAction]{}) {
+		t.Fatalf("reset status = %#v", got)
 	}
 }
 

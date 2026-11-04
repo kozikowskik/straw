@@ -2,6 +2,7 @@ package straw
 
 import (
 	"errors"
+	"reflect"
 	"sync"
 	"testing"
 	"time"
@@ -336,6 +337,280 @@ func TestPendingSequenceClearsWithResolverState(t *testing.T) {
 			}
 		})
 	}
+}
+
+func assertIdlePendingStatus(t *testing.T, status PendingStatus[testAction]) {
+	t.Helper()
+	if !reflect.DeepEqual(status, PendingStatus[testAction]{}) {
+		t.Fatalf("status = %#v, want zero status", status)
+	}
+}
+
+func TestPendingStatusReportsIdleAndActivePendingState(t *testing.T) {
+	resolver, err := New([]Binding[testAction]{
+		Bind(testGoHome, TextSequence("g"), Description("go home")),
+		Bind(testCopyLine, TextSequence("gh"), Description("go help")),
+	})
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+	assertIdlePendingStatus(t, resolver.PendingStatus())
+	resolver.UpdateKey(Text("g"))
+	status := resolver.PendingStatus()
+	if !status.Pending || !status.HasBinding {
+		t.Fatalf("status = %#v, want pending exact binding", status)
+	}
+	assertSeqEqual(t, status.Sequence, TextSequence("g"))
+	if len(status.NextChoices) != 1 {
+		t.Fatalf("choices = %d, want 1", len(status.NextChoices))
+	}
+	assertNextChoice(t, status.NextChoices[0], Text("h"), TextSequence("gh"), true, false, testCopyLine, "go help")
+	if status.Binding.Action() != testGoHome || status.Binding.Description() != "go home" {
+		t.Fatalf("binding = %#v, want go home", status.Binding)
+	}
+	assertSeqEqual(t, status.Binding.Sequence(), TextSequence("g"))
+}
+
+func TestPendingStatusReportsPrefixOnlyWithoutBinding(t *testing.T) {
+	resolver, err := New([]Binding[testAction]{
+		Bind(testCopyLine, TextSequence("gh"), Description("go help")),
+	})
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+	resolver.UpdateKey(Text("g"))
+	status := resolver.PendingStatus()
+	if !status.Pending || status.HasBinding || !reflect.DeepEqual(status.Binding, Binding[testAction]{}) {
+		t.Fatalf("prefix-only status = %#v", status)
+	}
+	assertSeqEqual(t, status.Sequence, TextSequence("g"))
+	if len(status.NextChoices) != 1 {
+		t.Fatalf("choices = %d, want 1", len(status.NextChoices))
+	}
+	assertNextChoice(t, status.NextChoices[0], Text("h"), TextSequence("gh"), true, false, testCopyLine, "go help")
+}
+
+func TestPendingStatusClearsWithResolverState(t *testing.T) {
+	tests := []struct {
+		name       string
+		prefixOnly bool
+		run        func(*Resolver[testAction], Timeout[testAction])
+	}{
+		{name: "reset", run: func(r *Resolver[testAction], _ Timeout[testAction]) { r.Reset() }},
+		{name: "cancel", run: func(r *Resolver[testAction], _ Timeout[testAction]) { r.UpdateKey(Code(KeyEsc)) }},
+		{name: "exact timeout", run: func(r *Resolver[testAction], token Timeout[testAction]) { r.UpdateTimeout(token) }},
+		{name: "prefix timeout", prefixOnly: true, run: func(r *Resolver[testAction], token Timeout[testAction]) { r.UpdateTimeout(token) }},
+		{name: "unmatched", run: func(r *Resolver[testAction], _ Timeout[testAction]) { r.UpdateKey(Text("x")) }},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			bindings := []Binding[testAction]{Bind(testCopyLine, TextSequence("gh"))}
+			if !tt.prefixOnly {
+				bindings = append(bindings, Bind(testGoHome, TextSequence("g")))
+			}
+			resolver, err := New(bindings)
+			if err != nil {
+				t.Fatalf("New() error = %v", err)
+			}
+			_, token := resolver.UpdateKey(Text("g"))
+			if !resolver.PendingStatus().Pending || !token.Scheduled() {
+				t.Fatal("setup did not enter pending state")
+			}
+			tt.run(resolver, token)
+			assertIdlePendingStatus(t, resolver.PendingStatus())
+		})
+	}
+}
+
+func TestPendingStatusKeepsStateForIgnoredTimeouts(t *testing.T) {
+	bindings := []Binding[testAction]{
+		Bind(testGoHome, TextSequence("g"), Description("go home")),
+		Bind(testCopyLine, TextSequence("gh"), Description("go help")),
+	}
+	resolver, err := New(bindings)
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+	foreignResolver, err := New(bindings)
+	if err != nil {
+		t.Fatalf("foreign New() error = %v", err)
+	}
+	_, foreign := foreignResolver.UpdateKey(Text("g"))
+	_, stale := resolver.UpdateKey(Text("g"))
+	resolver.Reset()
+	_, active := resolver.UpdateKey(Text("g"))
+	if !foreign.Scheduled() || !stale.Scheduled() || !active.Scheduled() {
+		t.Fatal("setup did not schedule tokens")
+	}
+	before := resolver.PendingStatus()
+	for _, ignored := range []Timeout[testAction]{{}, stale, foreign} {
+		if !resolver.UpdateTimeout(ignored).IsIdle() {
+			t.Fatal("ignored token must return Idle")
+		}
+		if !reflect.DeepEqual(resolver.PendingStatus(), before) {
+			t.Fatal("ignored token changed pending status")
+		}
+	}
+	if !resolver.UpdateTimeout(active).Match(testGoHome) {
+		t.Fatal("active timeout must remain valid")
+	}
+	assertIdlePendingStatus(t, resolver.PendingStatus())
+}
+
+func TestPendingStatusReturnsDefensiveCopies(t *testing.T) {
+	resolver, err := New([]Binding[testAction]{
+		Bind(testGoHome, TextSequence("g"), Description("go home")),
+		Bind(testCopyLine, TextSequence("gh"), Description("go help")),
+	})
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+	_, token := resolver.UpdateKey(Text("g"))
+	status := resolver.PendingStatus()
+	if len(status.Sequence) != 1 || len(status.NextChoices) != 1 {
+		t.Fatalf("unexpected setup status: %#v", status)
+	}
+	status.Binding.Sequence()[0] = Text("x")
+	status.NextChoices[0].Binding.Sequence()[0] = Text("x")
+	status.Sequence[0] = Text("x")
+	status.NextChoices[0].Sequence[0] = Text("x")
+	status.NextChoices[0].Key = Text("x")
+	status.NextChoices[0].HasChildren = true
+	status.NextChoices[0].Binding = Binding[testAction]{}
+	status.NextChoices[0].HasBinding = false
+	fresh := resolver.PendingStatus()
+	assertSeqEqual(t, fresh.Sequence, TextSequence("g"))
+	if len(fresh.NextChoices) != 1 {
+		t.Fatalf("fresh choices = %d, want 1", len(fresh.NextChoices))
+	}
+	assertNextChoice(t, fresh.NextChoices[0], Text("h"), TextSequence("gh"), true, false, testCopyLine, "go help")
+	if !fresh.HasBinding || fresh.Binding.Action() != testGoHome || fresh.Binding.Description() != "go home" {
+		t.Fatalf("fresh binding changed: %#v", fresh)
+	}
+	assertSeqEqual(t, fresh.Binding.Sequence(), TextSequence("g"))
+	assertSeqEqual(t, fresh.NextChoices[0].Binding.Sequence(), TextSequence("gh"))
+	result := resolver.UpdateTimeout(token)
+	if !result.Match(testGoHome) {
+		t.Fatal("mutation altered timeout resolution")
+	}
+	binding, ok := result.Binding()
+	if !ok {
+		t.Fatal("matched result has no binding")
+	}
+	assertSeqEqual(t, binding.Sequence(), TextSequence("g"))
+}
+
+func TestPendingStatusTracksCurrentPrefix(t *testing.T) {
+	resolver, err := New([]Binding[testAction]{
+		Bind(testGoHome, TextSequence("g"), Description("go home")),
+		Bind(testCopyLine, TextSequence("ghi"), Description("go help")),
+	})
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+	resolver.UpdateKey(Text("g"))
+	initial := resolver.PendingStatus()
+	if !initial.Pending || !initial.HasBinding || initial.Binding.Action() != testGoHome {
+		t.Fatalf("initial status = %#v", initial)
+	}
+	_, token := resolver.UpdateKey(Text("h"))
+	status := resolver.PendingStatus()
+	if !status.Pending || status.HasBinding || !reflect.DeepEqual(status.Binding, Binding[testAction]{}) {
+		t.Fatalf("prefix-only status = %#v", status)
+	}
+	assertSeqEqual(t, status.Sequence, TextSequence("gh"))
+	if len(status.NextChoices) != 1 {
+		t.Fatalf("choices = %d, want 1", len(status.NextChoices))
+	}
+	assertNextChoice(t, status.NextChoices[0], Text("i"), TextSequence("ghi"), true, false, testCopyLine, "go help")
+	if !token.Scheduled() || !resolver.UpdateTimeout(token).IsCanceled() {
+		t.Fatal("prefix-only timeout must cancel, not match g")
+	}
+	assertIdlePendingStatus(t, resolver.PendingStatus())
+}
+
+func TestPendingStatusClearsAfterKeyMatch(t *testing.T) {
+	resolver, err := New([]Binding[testAction]{
+		Bind(testGoHome, TextSequence("g")),
+		Bind(testCopyLine, TextSequence("gh")),
+	})
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+	resolver.UpdateKey(Text("g"))
+	status := resolver.PendingStatus()
+	if !status.Pending || !status.HasBinding || status.Binding.Action() != testGoHome {
+		t.Fatalf("setup status = %#v", status)
+	}
+	result, token := resolver.UpdateKey(Text("h"))
+	if !result.Match(testCopyLine) || token.Scheduled() {
+		t.Fatal("want final gh match without timeout")
+	}
+	assertIdlePendingStatus(t, resolver.PendingStatus())
+}
+
+func TestPendingStatusReadsPreserveTimeout(t *testing.T) {
+	resolver, err := New([]Binding[testAction]{
+		Bind(testGoHome, TextSequence("g")),
+		Bind(testCopyLine, TextSequence("gh")),
+	})
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+	_, token := resolver.UpdateKey(Text("g"))
+	before := resolver.PendingStatus()
+	if !token.Scheduled() || !before.Pending || !before.HasBinding {
+		t.Fatal("setup did not enter ambiguous pending state")
+	}
+	for range 3 {
+		if !reflect.DeepEqual(resolver.PendingStatus(), before) {
+			t.Fatal("inspection changed status")
+		}
+	}
+	if !resolver.UpdateTimeout(token).Match(testGoHome) {
+		t.Fatal("inspection invalidated the original token")
+	}
+	assertIdlePendingStatus(t, resolver.PendingStatus())
+}
+
+func TestPendingStatusRetainsReturnedData(t *testing.T) {
+	resolver, err := New([]Binding[testAction]{
+		Bind(testGoHome, TextSequence("g"), Description("go home")),
+		Bind(testCopyLine, TextSequence("ghi"), Description("go help")),
+	})
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+	resolver.UpdateKey(Text("g"))
+	saved := resolver.PendingStatus()
+	resolver.UpdateKey(Text("h"))
+	resolver.Reset()
+	if !saved.Pending || !saved.HasBinding || saved.Binding.Action() != testGoHome || saved.Binding.Description() != "go home" {
+		t.Fatalf("saved binding changed: %#v", saved)
+	}
+	assertSeqEqual(t, saved.Sequence, TextSequence("g"))
+	assertSeqEqual(t, saved.Binding.Sequence(), TextSequence("g"))
+	if len(saved.NextChoices) != 1 {
+		t.Fatalf("saved choices = %d, want 1", len(saved.NextChoices))
+	}
+	assertNextChoice(t, saved.NextChoices[0], Text("h"), TextSequence("gh"), false, true, 0, "")
+	assertIdlePendingStatus(t, resolver.PendingStatus())
+}
+
+func TestPendingStatusRecognizesZeroAction(t *testing.T) {
+	resolver, err := New([]Binding[testAction]{
+		Bind(testAction(0), TextSequence("g")),
+		Bind(testCopyLine, TextSequence("gh")),
+	})
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+	resolver.UpdateKey(Text("g"))
+	status := resolver.PendingStatus()
+	if !status.Pending || !status.HasBinding || status.Binding.Action() != 0 {
+		t.Fatalf("zero action must be present: %#v", status)
+	}
+	assertSeqEqual(t, status.Binding.Sequence(), TextSequence("g"))
 }
 
 func TestNextChoicesReturnsRootAndPendingChoices(t *testing.T) {

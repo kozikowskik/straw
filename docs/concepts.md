@@ -91,6 +91,37 @@ for _, choice := range resolver.NextChoices() {
 
 When the resolver is idle, `NextChoices()` returns root-level choices. When a prefix is pending, it returns choices under that prefix. Each row is one immediate next key, not every descendant binding. A choice can complete a binding, continue to longer bindings, or both.
 
+Use `PendingStatus()` to inspect the pending flag, active sequence, immediate choices, and exact binding waiting for timeout together:
+
+```go
+import (
+	"fmt"
+	strawcore "github.com/kozikowskik/straw"
+)
+
+func showPending() error {
+	resolver, err := strawcore.New([]strawcore.Binding[string]{
+		strawcore.Bind("go-home", strawcore.TextSequence("g"), strawcore.Description("go home")),
+		strawcore.Bind("go-help", strawcore.TextSequence("gh"), strawcore.Description("go help")),
+	})
+	if err != nil {
+		return err
+	}
+	resolver.UpdateKey(strawcore.Text("g"))
+	status := resolver.PendingStatus()
+	if status.Pending && status.HasBinding {
+		fmt.Println("waiting for more keys, or timeout will match", status.Binding.Description())
+	}
+	return nil
+}
+```
+
+This example uses the version-neutral core. Both Bubble Tea adapters expose the same `PendingStatus()` method after messages are passed to their `Update` method.
+
+`PendingStatus.Binding` is present only when `HasBinding` is true: the current pending sequence is also an exact binding. It is not a final match. `Result.Binding()` is populated only after an update produces a `Matched` result. Inspection does not resolve matches or execute actions; the host handles actions after matching.
+
+An idle `PendingStatus()` is empty, including its choices. Use standalone `NextChoices()` for root-level choices while idle. Returned sequences and choices are copies; modifying them does not change resolver state. Binding actions retain their existing value semantics. Collecting pending status also collects choices, so use `Pending()` when only the pending flag is needed.
+
 ## Timeout Behavior
 
 Pending sequences use a timeout so a short binding can coexist with a longer binding that shares its prefix.

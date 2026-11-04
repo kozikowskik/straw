@@ -196,3 +196,28 @@ func ExampleShouldPassThrough() {
 	// Output:
 	// true
 }
+
+// ExampleResolver_PendingStatus inspects an ambiguous binding before resolution.
+func ExampleResolver_PendingStatus() {
+	resolver, err := straw.New([]straw.Binding[string]{
+		straw.Bind("go-home", straw.TextSequence("g"), straw.Description("go home")),
+		straw.Bind("go-help", straw.TextSequence("gh"), straw.Description("go help")),
+	})
+	if err != nil {
+		panic(err)
+	}
+	_, timeout := resolver.UpdateKey(straw.Text("g"))
+	status := resolver.PendingStatus()
+	fmt.Println(status.Pending, status.HasBinding, status.Binding.Description())
+	fmt.Println(status.Sequence[0].Label(), status.NextChoices[0].Key.Label())
+	// Inspection executes no action. The host handles the eventual matched result.
+	result := resolver.UpdateTimeout(timeout)
+	fmt.Println(result.Match("go-home"))
+	idle := resolver.PendingStatus()
+	fmt.Println(idle.Pending, idle.HasBinding, len(idle.Sequence), len(idle.NextChoices))
+	// Output:
+	// true true go home
+	// g h
+	// true
+	// false false 0 0
+}
