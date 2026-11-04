@@ -2,7 +2,7 @@
 
 All notable changes to `straw` will be documented in this file.
 
-## v0.2.0 - Unreleased
+## v0.2.0 - 2026-11-04
 
 ### Added
 
