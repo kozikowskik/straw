@@ -6,7 +6,7 @@ Thank you for taking the time to improve `straw`.
 
 ## Local Setup
 
-Install Go, then download module dependencies:
+Install Go 1.26.0 or newer, then download module dependencies:
 
 ```sh
 go mod download

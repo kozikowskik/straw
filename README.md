@@ -12,6 +12,8 @@ Bubble Tea emits individual key press messages. `straw` turns those events into 
 
 ## Installation
 
+Requires Go 1.26.0 or newer.
+
 ```sh
 go get github.com/kozikowskik/straw
 ```
@@ -113,6 +115,7 @@ go run ./examples/timeout-cancel
 - Resolve multi-key sequences such as `gh` and `gd`.
 - Match modified keys such as `ctrl+c` and `alt+enter`.
 - Handle ambiguous prefixes with pending timeouts.
+- Inspect pending sequences, available next keys, and bindings waiting for timeout.
 - Keep unmatched keys available for normal Bubble Tea key handling.
 - Use Bubble Tea v1 or v2 through separate adapter packages.
 
