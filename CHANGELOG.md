@@ -6,6 +6,7 @@ All notable changes to `straw` will be documented in this file.
 
 - Added `Resolver.PendingSequence()` for reading the active pending key sequence safely.
 - Added `Resolver.NextChoices()` and `NextChoice[A]` for rendering immediate which-key-style choices from resolver state.
+- Added `Resolver.PendingStatus()` and `PendingStatus[A]` for grouped pending-sequence inspection, including the exact binding waiting behind an ambiguous prefix.
 - Added `Key.Label()` for stable display labels across text, special, and modified keys.
 - Forwarded resolver query APIs through the Bubble Tea v1 and v2 adapter resolvers.
 - Documented resolver query APIs and added tests and benchmarks for the new behavior.

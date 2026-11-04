@@ -25,6 +25,22 @@ type Resolver[A comparable] struct {
 	hasPendingMatch bool
 }
 
+// PendingStatus describes the resolver's current pending sequence, if any.
+type PendingStatus[A comparable] struct {
+	// Pending reports whether the resolver is waiting for more keys.
+	Pending bool
+	// Sequence contains a copy of the active pending sequence.
+	Sequence Seq
+	// NextChoices contains caller-owned immediate continuation choices.
+	// It is empty when the resolver is idle.
+	NextChoices []NextChoice[A]
+	// Binding is the exact binding waiting for timeout resolution.
+	// It is zero when HasBinding is false.
+	Binding Binding[A]
+	// HasBinding reports whether the current pending sequence is an exact binding.
+	HasBinding bool
+}
+
 // New validates resolver options and builds a resolver.
 func New[A comparable](bindings []Binding[A], opts ...Option) (*Resolver[A], error) {
 	options, err := buildResolverOptions(opts)
@@ -107,6 +123,27 @@ func (r *Resolver[A]) PendingSequence() Seq {
 // NextChoices returns the immediate keys available from the current pending sequence.
 func (r *Resolver[A]) NextChoices() []NextChoice[A] {
 	return r.index.nextChoices(r.pendingSeq)
+}
+
+// PendingStatus returns the resolver's current pending-sequence status.
+// It returns the zero value when idle. Returned sequences and choices are
+// caller-owned copies; binding actions retain their existing value semantics.
+// Reading status does not resolve a match, execute an action, or change timeouts.
+func (r *Resolver[A]) PendingStatus() PendingStatus[A] {
+	if !r.Pending() {
+		return PendingStatus[A]{}
+	}
+
+	status := PendingStatus[A]{
+		Pending:     true,
+		Sequence:    r.PendingSequence(),
+		NextChoices: r.NextChoices(),
+	}
+	if r.hasPendingMatch {
+		status.Binding = r.pendingMatch
+		status.HasBinding = true
+	}
+	return status
 }
 
 // Scheduled reports whether this timeout token should be scheduled by an adapter.

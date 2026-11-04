@@ -17,6 +17,9 @@ type NextChoice[A comparable] = straw.NextChoice[A]
 type State = straw.State
 type Mod = straw.Mod
 
+// PendingStatus describes the resolver's current pending sequence, if any.
+type PendingStatus[A comparable] = straw.PendingStatus[A]
+
 const (
 	Idle      = straw.Idle
 	Pending   = straw.Pending
@@ -121,6 +124,9 @@ func (r *Resolver[A]) PendingSequence() Seq { return r.core.PendingSequence() }
 
 // NextChoices returns the immediate keys available from the current pending sequence.
 func (r *Resolver[A]) NextChoices() []NextChoice[A] { return r.core.NextChoices() }
+
+// PendingStatus returns the resolver's current pending-sequence status.
+func (r *Resolver[A]) PendingStatus() PendingStatus[A] { return r.core.PendingStatus() }
 
 type timeoutMsg[A comparable] struct {
 	token straw.Timeout[A]
