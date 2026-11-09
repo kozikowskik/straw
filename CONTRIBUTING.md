@@ -62,6 +62,12 @@ Before opening a pull request, please check:
 - Documentation is updated when behavior or user-facing commands change.
 - The PR description explains the problem, solution, and verification performed.
 
+## AI-Assisted Contributions
+
+AI-assisted contributions are welcome. When using a coding agent, follow [AGENTS.md](AGENTS.md) alongside these contribution guidelines.
+
+You remain responsible for the submitted changes. Review and understand the implementation, verify its behavior, and be prepared to explain it and address review feedback. The same quality, testing, and documentation expectations apply regardless of the tools used.
+
 ## Issues And Feature Requests
 
 Please include enough detail for maintainers to reproduce or evaluate the request:

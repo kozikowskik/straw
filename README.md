@@ -134,6 +134,8 @@ go run ./examples/timeout-cancel
 
 Contributions are welcome. See `CONTRIBUTING.md` for local setup, tests, benchmarks, and pull request expectations.
 
+Using a coding agent? See [AGENTS.md](AGENTS.md) for repository-specific instructions.
+
 ## License
 
 `straw` is available under the MIT License. See `LICENSE` for details.
