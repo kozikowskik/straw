@@ -146,9 +146,10 @@ _ = resolver
 ```
 
 Check exported errors with `errors.Is` when your application wants to handle one category differently.
+The sentinel errors live in the root package, so adapter users should also import `strawcore "github.com/kozikowskik/straw"`.
 
 ```go
-if errors.Is(err, straw.ErrDuplicateSequence) {
+if errors.Is(err, strawcore.ErrDuplicateSequence) {
 	return fmt.Errorf("duplicate key sequence: %w", err)
 }
 ```
