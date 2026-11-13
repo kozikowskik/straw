@@ -124,19 +124,13 @@ For most multi-screen applications, route the message to the active child model 
 
 This is expected. Adapter resolvers return `Idle` for non-key messages and for timeout messages that do not belong to the current pending sequence.
 
-Handle non-key Bubble Tea messages as usual after the pass-through check or before calling the resolver if they should always run.
+Handle application-owned non-key messages before returning from the pass-through check. You can handle them before calling the resolver if appropriate, but still pass the adapter's timeout messages to `resolver.Update` so pending sequences can resolve.
 
 The adapters also ignore key input that does not map to one supported key press. Pasted text, multi-rune key messages, and key release messages are ignored by the current adapters.
 
 ## Duplicate Sequence Errors
 
 Each sequence can map to only one action. If `New` returns `ErrDuplicateSequence`, remove or change one of the duplicate bindings.
-
-```go
-if errors.Is(err, straw.ErrDuplicateSequence) {
-	return fmt.Errorf("duplicate key sequence: %w", err)
-}
-```
 
 The sentinel errors live in the root package. Adapter packages re-export binding builders and key constants, but when you want explicit error checks, import the root package too.
 

@@ -40,7 +40,7 @@ Every resolver update returns a `Result[A]`, where `A` is your action type.
 | `Pending` | The current keys are a valid prefix and the resolver is waiting for another key. |
 | `Matched` | The current sequence matched a binding. |
 | `Unmatched` | The input did not match any binding. |
-| `Canceled` | Pending input was canceled by a configured cancel key. |
+| `Canceled` | Pending input was canceled by a configured cancel key, or timed out without an exact binding to match. |
 
 Check result state with methods such as `IsPending`, `IsMatched`, `IsUnmatched`, and `IsCanceled`. Use `Match(action)` when you want to handle one specific action.
 
@@ -194,4 +194,4 @@ The resolver is intentionally small and predictable. These limits are part of th
 - Bubble Tea adapters ignore input that is not one supported key press, such as pasted text, multi-rune key messages, and key release messages.
 - Lookup is simple and scales linearly with the number of bindings. This is fine for typical terminal keymaps.
 - The resolver is mutable and is intended to be used from one update loop at a time.
-- Binding analysis, file-based binding configuration, modes, contexts, enabled or disabled bindings, and continuation inspection are deferred.
+- Binding analysis, file-based binding configuration, modes, contexts, and enabled or disabled bindings are deferred.
